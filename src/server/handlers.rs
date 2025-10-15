@@ -18,6 +18,7 @@ impl TimeHandler {
     pub async fn handle_request(&self, request: McpRequest) -> McpResponse {
         let result = match request.method.as_str() {
             "initialize" => self.handle_initialize(request.params).await,
+            "tools/list" => self.list_tools(request.params).await,
             "time/get" => self.get_time(request.params).await,
             "time/get_with_format" => self.get_time_formatted(request.params).await,
             "time/get_with_timezone" => self.get_time_with_tz(request.params).await,
@@ -41,78 +42,7 @@ impl TimeHandler {
         debug!("Handling initialize request");
 
         let capabilities = ServerCapabilities {
-            tools: vec![
-                ToolDefinition {
-                    name: "time/get".to_string(),
-                    description: "Get current UTC time with full Unix/POSIX details".to_string(),
-                    parameters: None,
-                },
-                ToolDefinition {
-                    name: "time/get_unix".to_string(),
-                    description: "Get Unix epoch time with nanosecond precision".to_string(),
-                    parameters: None,
-                },
-                ToolDefinition {
-                    name: "time/get_nanos".to_string(),
-                    description: "Get nanoseconds since Unix epoch".to_string(),
-                    parameters: None,
-                },
-                ToolDefinition {
-                    name: "time/get_with_format".to_string(),
-                    description: "Get time formatted with strftime format string".to_string(),
-                    parameters: Some(json!({
-                        "type": "object",
-                        "properties": {
-                            "format": {
-                                "type": "string",
-                                "description": "strftime format string"
-                            }
-                        },
-                        "required": ["format"]
-                    })),
-                },
-                ToolDefinition {
-                    name: "time/get_with_timezone".to_string(),
-                    description: "Get time in specified timezone".to_string(),
-                    parameters: Some(json!({
-                        "type": "object",
-                        "properties": {
-                            "timezone": {
-                                "type": "string",
-                                "description": "IANA timezone name (e.g., 'America/New_York')"
-                            }
-                        },
-                        "required": ["timezone"]
-                    })),
-                },
-                ToolDefinition {
-                    name: "time/list_timezones".to_string(),
-                    description: "List all available IANA timezones".to_string(),
-                    parameters: None,
-                },
-                ToolDefinition {
-                    name: "time/convert".to_string(),
-                    description: "Convert timestamp between timezones".to_string(),
-                    parameters: Some(json!({
-                        "type": "object",
-                        "properties": {
-                            "timestamp": {
-                                "type": "number",
-                                "description": "Unix timestamp in seconds"
-                            },
-                            "from_timezone": {
-                                "type": "string",
-                                "description": "Source timezone (optional, defaults to UTC)"
-                            },
-                            "to_timezone": {
-                                "type": "string",
-                                "description": "Target timezone"
-                            }
-                        },
-                        "required": ["timestamp", "to_timezone"]
-                    })),
-                },
-            ],
+            tools: self.get_tool_definitions(),
         };
 
         Ok(json!({
@@ -123,6 +53,88 @@ impl TimeHandler {
             },
             "capabilities": capabilities
         }))
+    }
+
+    async fn list_tools(&self, _params: Value) -> Result<Value> {
+        debug!("Listing tools");
+        Ok(json!({
+            "tools": self.get_tool_definitions()
+        }))
+    }
+
+    fn get_tool_definitions(&self) -> Vec<ToolDefinition> {
+        vec![
+            ToolDefinition {
+                name: "time/get".to_string(),
+                description: "Get current UTC time with full Unix/POSIX details".to_string(),
+                parameters: None,
+            },
+            ToolDefinition {
+                name: "time/get_unix".to_string(),
+                description: "Get Unix epoch time with nanosecond precision".to_string(),
+                parameters: None,
+            },
+            ToolDefinition {
+                name: "time/get_nanos".to_string(),
+                description: "Get nanoseconds since Unix epoch".to_string(),
+                parameters: None,
+            },
+            ToolDefinition {
+                name: "time/get_with_format".to_string(),
+                description: "Get time formatted with strftime format string".to_string(),
+                parameters: Some(json!({
+                    "type": "object",
+                    "properties": {
+                        "format": {
+                            "type": "string",
+                            "description": "strftime format string"
+                        }
+                    },
+                    "required": ["format"]
+                })),
+            },
+            ToolDefinition {
+                name: "time/get_with_timezone".to_string(),
+                description: "Get time in specified timezone".to_string(),
+                parameters: Some(json!({
+                    "type": "object",
+                    "properties": {
+                        "timezone": {
+                            "type": "string",
+                            "description": "IANA timezone name (e.g., 'America/New_York')"
+                        }
+                    },
+                    "required": ["timezone"]
+                })),
+            },
+            ToolDefinition {
+                name: "time/list_timezones".to_string(),
+                description: "List all available IANA timezones".to_string(),
+                parameters: None,
+            },
+            ToolDefinition {
+                name: "time/convert".to_string(),
+                description: "Convert timestamp between timezones".to_string(),
+                parameters: Some(json!({
+                    "type": "object",
+                    "properties": {
+                        "timestamp": {
+                            "type": "number",
+                            "description": "Unix timestamp in seconds"
+                        },
+                        "from_timezone": {
+                            "type": "string",
+                            "description": "Source timezone (optional, defaults to UTC)"
+                        },
+                        "to_timezone": {
+                            "type": "string",
+                            "description": "Target timezone"
+                        }
+                    },
+                    "required": ["timestamp", "to_timezone"]
+                })),
+            },
+        ]
     }
 
     async fn get_time(&self, _params: Value) -> Result<Value> {

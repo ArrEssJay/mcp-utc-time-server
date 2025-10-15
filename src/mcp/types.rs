@@ -7,8 +7,13 @@ use serde_json::Value;
 pub struct McpRequest {
     pub jsonrpc: String,
     pub method: String,
+    #[serde(default = "default_params")]
     pub params: Value,
     pub id: Option<Value>,
+}
+
+fn default_params() -> Value {
+    Value::Null
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
