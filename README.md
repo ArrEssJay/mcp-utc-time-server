@@ -250,6 +250,46 @@ cargo install cargo-tarpaulin
 cargo tarpaulin --out Html
 ```
 
+## Integration Options
+
+### VSCode (Local)
+Direct STDIO integration for VSCode Copilot and AI features. See [QUICKSTART.md](QUICKSTART.md) for setup.
+
+### ChatGPT Custom GPT (Remote)
+Expose via Cloudflare Tunnel for ChatGPT integration:
+
+```bash
+# Install dependencies
+pip install mcpo
+brew install cloudflare/cloudflare/cloudflared
+
+# Start with automatic tunnel
+export MCPO_API_KEY="$(openssl rand -base64 32)"
+./scripts/start_tunnel.sh
+
+# Test connectivity
+./scripts/test_tunnel.sh
+
+# Stop when done
+./scripts/stop_tunnel.sh
+```
+
+**Complete guide:** [docs/TUNNEL_SETUP.md](docs/TUNNEL_SETUP.md)
+
+### HTTP API (MCPO)
+For custom integrations, expose as REST API:
+
+```bash
+export MCPO_API_KEY="your-secret-key"
+./scripts/start_mcpo.sh
+
+# Access at http://localhost:8000
+curl -X POST http://localhost:8000/time/get \
+  -H "Authorization: Bearer $MCPO_API_KEY"
+```
+
+See [docs/INTEGRATION.md](docs/INTEGRATION.md) for all integration options.
+
 ## Development
 
 ### Project Structure
@@ -275,6 +315,17 @@ mcp-utc-time-server/
 │       └── protocol.rs   # Protocol constants
 ├── tests/                # Integration tests
 ├── benches/              # Performance benchmarks
+├── scripts/              # Helper scripts
+│   ├── start_mcpo.sh     # MCPO HTTP wrapper
+│   ├── start_tunnel.sh   # Automated tunnel setup
+│   ├── test_tunnel.sh    # Tunnel connectivity tests
+│   ├── test_mcpo.sh      # MCPO API tests
+│   └── test_vscode.sh    # VSCode integration tests
+├── docs/                 # Documentation
+│   ├── INTEGRATION.md    # All integration methods
+│   ├── TUNNEL_SETUP.md   # Cloudflare tunnel guide
+│   ├── PERFORMANCE.md    # Benchmark results
+│   └── TEST_REPORT.md    # Test coverage
 └── .vscode/              # VSCode configuration
 ```
 

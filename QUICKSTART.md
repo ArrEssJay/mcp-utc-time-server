@@ -60,30 +60,37 @@ All tests should show ✓ (green checkmarks).
 
 ### 3. ChatGPT Integration (Advanced)
 
-**Install MCPO:**
+**Install MCPO & cloudflared:**
 
 ```bash
 pip install mcpo
-# or
-brew install mcpo
+brew install cloudflare/cloudflare/cloudflared
 ```
 
-**Start server:**
+**Start with automatic tunnel:**
 
 ```bash
 export MCPO_API_KEY="$(openssl rand -base64 32)"
-./scripts/start_mcpo.sh
+./scripts/start_tunnel.sh  # Starts MCPO + tunnel + shows setup instructions
 ```
 
-**Expose with Cloudflare:**
+**Test the tunnel:**
 
 ```bash
-# In new terminal
-cloudflared tunnel --url http://localhost:8000
+# In another terminal
+./scripts/test_tunnel.sh  # Runs comprehensive connectivity tests
 ```
 
-**Configure ChatGPT:**
-See [docs/INTEGRATION.md](docs/INTEGRATION.md#3-chatgpt-integration-via-cloudflare-tunnel) for detailed steps.
+**Stop when done:**
+
+```bash
+./scripts/stop_tunnel.sh
+```
+
+**Full Documentation:**
+- Quick start: Follow on-screen instructions from `start_tunnel.sh`
+- Complete guide: [docs/TUNNEL_SETUP.md](docs/TUNNEL_SETUP.md)
+- Integration steps: [docs/INTEGRATION.md](docs/INTEGRATION.md#3-chatgpt-integration-via-cloudflare-tunnel)
 
 ## Available Methods
 

@@ -150,6 +150,8 @@ uvx mcpo --port $MCPO_PORT --api-key $MCPO_API_KEY -- \
 
 ## 3. ChatGPT Integration via Cloudflare Tunnel
 
+> **📚 Complete Guide:** See [TUNNEL_SETUP.md](TUNNEL_SETUP.md) for comprehensive tunnel documentation including automated scripts, security best practices, and troubleshooting.
+
 ### Prerequisites
 
 ```bash
@@ -158,7 +160,28 @@ brew install cloudflare/cloudflare/cloudflared
 # or download from: https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/
 ```
 
-### Step-by-Step Setup
+### Quick Start (Automated)
+
+For a fully automated setup with monitoring and testing:
+
+```bash
+# Generate API key
+export MCPO_API_KEY="$(openssl rand -base64 32)"
+echo "Save this key: $MCPO_API_KEY"
+
+# Start tunnel (automated)
+./scripts/start_tunnel.sh
+
+# Test in another terminal
+./scripts/test_tunnel.sh
+
+# Stop when done
+./scripts/stop_tunnel.sh
+```
+
+See [TUNNEL_SETUP.md](TUNNEL_SETUP.md) for details.
+
+### Step-by-Step Setup (Manual)
 
 #### Step 1: Start MCPO Server
 
