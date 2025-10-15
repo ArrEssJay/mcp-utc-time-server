@@ -1,0 +1,26 @@
+{
+    "python.formatting.provider": "black",
+    "editor.formatOnSave": true,
+    "editor.tabSize": 4,
+    "files.autoSave": "onWindowChange",
+    "rust-analyzer.cargo.loadOutDirsFromCheck": true,
+    "rust-analyzer.checkOnSave.command": "clippy",
+    "rust-analyzer.cargo.features": "all",
+    "[rust]": {
+        "editor.defaultFormatter": "rust-lang.rust-analyzer"
+    },
+    "mcp.servers": {
+        "utc-time": {
+            "command": "cargo",
+            "args": [
+                "run",
+                "--release"
+            ],
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "RUST_LOG": "mcp_utc_time_server=debug",
+                "TZ": "UTC"
+            }
+        }
+    }
+}

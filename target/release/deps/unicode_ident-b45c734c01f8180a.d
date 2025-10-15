@@ -1,0 +1,8 @@
+/Users/rowan/VSCode/wallclock_mcp/mcp-utc-time-server/target/release/deps/unicode_ident-b45c734c01f8180a.d: /Users/rowan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unicode-ident-1.0.19/src/lib.rs /Users/rowan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unicode-ident-1.0.19/src/tables.rs
+
+/Users/rowan/VSCode/wallclock_mcp/mcp-utc-time-server/target/release/deps/libunicode_ident-b45c734c01f8180a.rlib: /Users/rowan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unicode-ident-1.0.19/src/lib.rs /Users/rowan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unicode-ident-1.0.19/src/tables.rs
+
+/Users/rowan/VSCode/wallclock_mcp/mcp-utc-time-server/target/release/deps/libunicode_ident-b45c734c01f8180a.rmeta: /Users/rowan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unicode-ident-1.0.19/src/lib.rs /Users/rowan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unicode-ident-1.0.19/src/tables.rs
+
+/Users/rowan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unicode-ident-1.0.19/src/lib.rs:
+/Users/rowan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unicode-ident-1.0.19/src/tables.rs:

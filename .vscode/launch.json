@@ -1,0 +1,19 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug MCP UTC Time Server",
+            "type": "rust",
+            "request": "launch",
+            "program": "${workspaceFolder}/target/debug/mcp-utc-time-server",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "stopAtEntry": false,
+            "env": {
+                "RUST_BACKTRACE": "1"
+            },
+            "preLaunchTask": "cargo build",
+            "runInTerminal": true
+        }
+    ]
+}

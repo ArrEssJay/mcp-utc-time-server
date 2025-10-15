@@ -1,0 +1,67 @@
+# MCP UTC Time Server
+
+## Overview
+The MCP UTC Time Server is a Rust-based application that implements the MCP protocol to provide clients with access to the current UTC time. This server is designed to be easily installable and configurable within a development environment.
+
+## Features
+- Implements the MCP protocol for time requests.
+- Provides the current UTC time in a standardized format.
+- Modular architecture for easy maintenance and extension.
+
+## Project Structure
+```
+mcp-utc-time-server
+├── src
+│   ├── main.rs          # Entry point of the application
+│   ├── lib.rs           # Library interface
+│   ├── server           # Server module
+│   │   ├── mod.rs       # Server initialization and request handling
+│   │   ├── handlers.rs   # Request handlers for the MCP protocol
+│   │   └── protocol.rs   # MCP protocol specifications
+│   ├── time             # Time-related functionalities
+│   │   ├── mod.rs       # Time module interface
+│   │   └── utc.rs       # Functionality to retrieve current UTC time
+│   ├── mcp              # MCP protocol module
+│   │   ├── mod.rs       # MCP module interface
+│   │   ├── types.rs     # Data structures for MCP protocol
+│   │   └── transport.rs  # Transport layer for MCP communication
+│   └── error.rs         # Custom error types
+├── tests                # Integration tests
+│   └── integration_test.rs
+├── .vscode              # VSCode configuration
+│   ├── launch.json      # Launch configuration
+│   └── settings.json    # Workspace settings
+├── Cargo.toml           # Cargo configuration file
+├── Cargo.lock           # Dependency lock file
+├── .gitignore           # Git ignore file
+├── LICENSE              # Licensing information
+└── README.md            # Project documentation
+```
+
+## Installation
+1. Clone the repository:
+   ```
+   git clone <repository-url>
+   cd mcp-utc-time-server
+   ```
+
+2. Ensure you have Rust and Cargo installed. If not, you can install them from [rustup.rs](https://rustup.rs).
+
+3. Build the project:
+   ```
+   cargo build
+   ```
+
+4. Run the server:
+   ```
+   cargo run
+   ```
+
+## Usage
+Once the server is running, clients can send requests to retrieve the current UTC time using the MCP protocol. The server will respond with the time formatted according to the protocol specifications.
+
+## Contribution
+Contributions are welcome! Please fork the repository and submit a pull request with your changes. Ensure that your code adheres to the project's coding standards and includes appropriate tests.
+
+## License
+This project is licensed under the MIT License. See the LICENSE file for more details.

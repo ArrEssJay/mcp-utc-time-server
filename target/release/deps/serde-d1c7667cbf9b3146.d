@@ -1,0 +1,14 @@
+/Users/rowan/VSCode/wallclock_mcp/mcp-utc-time-server/target/release/deps/serde-d1c7667cbf9b3146.d: /Users/rowan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /Users/rowan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /Users/rowan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /Users/rowan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /Users/rowan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /Users/rowan/VSCode/wallclock_mcp/mcp-utc-time-server/target/release/build/serde-ca36516ea3f51d0a/out/private.rs
+
+/Users/rowan/VSCode/wallclock_mcp/mcp-utc-time-server/target/release/deps/libserde-d1c7667cbf9b3146.rlib: /Users/rowan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /Users/rowan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /Users/rowan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /Users/rowan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /Users/rowan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /Users/rowan/VSCode/wallclock_mcp/mcp-utc-time-server/target/release/build/serde-ca36516ea3f51d0a/out/private.rs
+
+/Users/rowan/VSCode/wallclock_mcp/mcp-utc-time-server/target/release/deps/libserde-d1c7667cbf9b3146.rmeta: /Users/rowan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /Users/rowan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /Users/rowan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /Users/rowan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /Users/rowan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /Users/rowan/VSCode/wallclock_mcp/mcp-utc-time-server/target/release/build/serde-ca36516ea3f51d0a/out/private.rs
+
+/Users/rowan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs:
+/Users/rowan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs:
+/Users/rowan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs:
+/Users/rowan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs:
+/Users/rowan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs:
+/Users/rowan/VSCode/wallclock_mcp/mcp-utc-time-server/target/release/build/serde-ca36516ea3f51d0a/out/private.rs:
+
+# env-dep:OUT_DIR=/Users/rowan/VSCode/wallclock_mcp/mcp-utc-time-server/target/release/build/serde-ca36516ea3f51d0a/out
