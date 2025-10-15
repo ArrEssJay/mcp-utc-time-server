@@ -1,24 +1,19 @@
 // MCP UTC Time Server - Main entry point
 
-use mcp_utc_time_server::server::McpServer;
+use anyhow::Result;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
-async fn main() {
-    // Initialise logging
+async fn main() -> Result<()> {
+    // Initialize logging to stderr
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "mcp_utc_time_server=info".into()),
+                .unwrap_or_else(|_| "mcp_utc_time_server=debug,info".into()),
         )
         .with(tracing_subscriber::fmt::layer().with_writer(std::io::stderr))
         .init();
 
-    // Create and run the MCP server
-    let mut server = McpServer::new();
-
-    if let Err(e) = server.run().await {
-        eprintln!("Server error: {}", e);
-        std::process::exit(1);
-    }
+    // Run the server with official SDK
+    mcp_utc_time_server::server_sdk::run().await
 }

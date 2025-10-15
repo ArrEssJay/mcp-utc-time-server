@@ -142,6 +142,31 @@ export MCPO_API_KEY="your-key"
 
 ---
 
+## MCP Protocol Testing
+
+### `test_mcp_simple.sh` - MCP Protocol Compliance Test
+
+**Purpose:** Tests comprehensive MCP 2025-06-18 protocol compliance.
+
+**Usage:**
+```bash
+./scripts/test_mcp_simple.sh [path-to-binary]
+```
+
+**What it tests:**
+- **Lifecycle:** initialize, protocol version, capabilities
+- **Tools:** tools/list, tools/call with all 7 tools
+- **Prompts:** prompts/list, prompts/get with all 4 prompts
+- **Legacy:** Backward compatibility with direct methods
+- **Errors:** Error handling and validation
+
+**12 comprehensive tests** covering:
+- Tools: get_time, get_unix_time, get_time_formatted, get_time_with_timezone
+- Prompts: /time, /unix_time, /time_in, /format_time
+- Protocol compliance with MCP 2025-06-18 specification
+
+---
+
 ## VSCode Integration
 
 ### `test_vscode.sh` - Test VSCode MCP Integration

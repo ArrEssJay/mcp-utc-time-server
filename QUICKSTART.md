@@ -56,7 +56,11 @@ All tests should show ✓ (green checkmarks).
 **In VSCode:**
 - Reload window (Cmd+Shift+P → "Developer: Reload Window")
 - Open Copilot chat
-- Type: "Get current UTC time"
+- Use slash commands:
+  - `/time` - Get current UTC time
+  - `/unix_time` - Get Unix timestamp
+  - `/time_in America/New_York` - Time in specific timezone
+  - `/format_time %Y-%m-%d %H:%M:%S` - Custom format
 
 ### 3. ChatGPT Integration (Advanced)
 
