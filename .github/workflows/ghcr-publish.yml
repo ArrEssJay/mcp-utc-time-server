@@ -2,7 +2,7 @@ name: Build and publish to GHCR
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, 'release/**' ]
 
 jobs:
   build-and-publish:
