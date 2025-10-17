@@ -10,10 +10,14 @@ services:
     container_name: mcp-utc-time
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "3000:3000"  # Health/metrics endpoint
     environment:
       # Logging
       - RUST_LOG=info
+      
+      # Server Configuration
+      - ENABLE_HEALTH_SERVER=true
+      - HEALTH_PORT=3000
       
       # NTP Configuration
       - NTP_SERVERS=time.cloudflare.com,time.google.com,time.nist.gov
@@ -38,19 +42,25 @@ services:
     networks:
       - mcp-network
     
-    # Security context
+    # Security context - Enhanced
     security_opt:
       - no-new-privileges:true
+      - apparmor:docker-default
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
     read_only: true
     tmpfs:
-      - /tmp
+      - /tmp:noexec,nosuid,size=64m
     
-    # Resource limits
+    # Resource limits - With PID limit
     deploy:
       resources:
         limits:
           cpus: '1.0'
           memory: 512M
+          pids: 100
         reservations:
           cpus: '0.25'
           memory: 128M

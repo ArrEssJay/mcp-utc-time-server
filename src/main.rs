@@ -1,11 +1,12 @@
 // MCP UTC Time Server - Main entry point
 
 use anyhow::Result;
+use std::env;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Initialize logging to stderr without ANSI colors
+    // Initialize structured logging to stderr without ANSI colors
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
@@ -20,6 +21,21 @@ async fn main() -> Result<()> {
         )
         .init();
 
-    // Run the server with official SDK
+    // Check if we should run health server alongside MCP server
+    let enable_health = env::var("ENABLE_HEALTH_SERVER")
+        .unwrap_or_else(|_| "true".into())
+        .parse::<bool>()
+        .unwrap_or(true);
+
+    if enable_health {
+        // Spawn HTTP health server in background
+        tokio::spawn(async {
+            if let Err(e) = mcp_utc_time_server::server_sdk::run_health_server().await {
+                eprintln!("Health server error: {}", e);
+            }
+        });
+    }
+
+    // Run the MCP server with official SDK (STDIO transport)
     mcp_utc_time_server::server_sdk::run().await
 }

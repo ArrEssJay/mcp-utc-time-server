@@ -206,6 +206,102 @@ impl TimeServer {
                 .map_err(|e| McpError::internal_error(e.to_string(), None))?,
         )]))
     }
+
+    /// Get NTP synchronization status (read-only)
+    #[tool(description = "Get NTP synchronization status and performance metrics (read-only)")]
+    async fn get_ntp_status(&self) -> Result<CallToolResult, McpError> {
+        debug!("Tool: get_ntp_status");
+
+        use crate::ntp::NtpSyncedClock;
+
+        // Check if NTP is available
+        let is_synced = NtpSyncedClock::is_synced().unwrap_or(false);
+
+        if !is_synced {
+            let result = json!({
+                "available": false,
+                "message": "NTP not available or not synchronized",
+                "synced": false
+            });
+            return Ok(CallToolResult::success(vec![Content::text(
+                serde_json::to_string_pretty(&result)
+                    .map_err(|e| McpError::internal_error(e.to_string(), None))?,
+            )]));
+        }
+
+        // Get detailed NTP status
+        match NtpSyncedClock::get_status() {
+            Ok(status) => {
+                let result = json!({
+                    "available": true,
+                    "synced": status.synced,
+                    "offset_ms": status.offset_ms,
+                    "stratum": status.stratum,
+                    "precision": status.precision,
+                    "root_delay": status.root_delay,
+                    "root_dispersion": status.root_dispersion,
+                    "health": if status.synced && status.offset_ms.abs() < 100.0 {
+                        "healthy"
+                    } else if status.synced {
+                        "degraded"
+                    } else {
+                        "unhealthy"
+                    }
+                });
+                Ok(CallToolResult::success(vec![Content::text(
+                    serde_json::to_string_pretty(&result)
+                        .map_err(|e| McpError::internal_error(e.to_string(), None))?,
+                )]))
+            }
+            Err(e) => {
+                let result = json!({
+                    "available": false,
+                    "error": e,
+                    "synced": false
+                });
+                Ok(CallToolResult::success(vec![Content::text(
+                    serde_json::to_string_pretty(&result)
+                        .map_err(|e| McpError::internal_error(e.to_string(), None))?,
+                )]))
+            }
+        }
+    }
+
+    /// Get NTP peers information (read-only)
+    #[tool(description = "Get information about NTP peers and their status (read-only)")]
+    async fn get_ntp_peers(&self) -> Result<CallToolResult, McpError> {
+        debug!("Tool: get_ntp_peers");
+
+        // Execute ntpq -p to get peer information
+        let output = std::process::Command::new("ntpq")
+            .args(["-p", "-n"])
+            .output();
+
+        match output {
+            Ok(output) if output.status.success() => {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                let result = json!({
+                    "available": true,
+                    "peers": stdout.lines().collect::<Vec<_>>(),
+                    "raw_output": stdout.to_string()
+                });
+                Ok(CallToolResult::success(vec![Content::text(
+                    serde_json::to_string_pretty(&result)
+                        .map_err(|e| McpError::internal_error(e.to_string(), None))?,
+                )]))
+            }
+            _ => {
+                let result = json!({
+                    "available": false,
+                    "error": "NTP daemon not available or ntpq command failed"
+                });
+                Ok(CallToolResult::success(vec![Content::text(
+                    serde_json::to_string_pretty(&result)
+                        .map_err(|e| McpError::internal_error(e.to_string(), None))?,
+                )]))
+            }
+        }
+    }
 }
 
 // Prompt implementations
@@ -311,8 +407,9 @@ impl ServerHandler for TimeServer {
                 ..Default::default()
             },
             instructions: Some(
-                "MCP UTC Time Server - Provides high-precision time and timezone services.\n\n\
-                 Tools: get_time, get_unix_time, get_nanos, get_time_formatted, get_time_with_timezone, list_timezones, convert_time\n\
+                "MCP UTC Time Server - Provides high-precision time, timezone, and NTP status services.\n\n\
+                 Time Tools: get_time, get_unix_time, get_nanos, get_time_formatted, get_time_with_timezone, list_timezones, convert_time\n\
+                 NTP Tools: get_ntp_status, get_ntp_peers\n\
                  Prompts: /time, /unix_time, /time_in <timezone>, /format_time <format>"
                     .into(),
             ),
@@ -320,15 +417,105 @@ impl ServerHandler for TimeServer {
     }
 }
 
-/// Run the server
+/// Run the MCP server (STDIO transport)
 pub async fn run() -> Result<()> {
-    info!("MCP UTC Time Server (SDK) starting");
+    info!(
+        event = "server.start",
+        version = env!("CARGO_PKG_VERSION"),
+        transport = "stdio",
+        "MCP UTC Time Server starting"
+    );
 
     let server = TimeServer::new();
     let service = server.serve(stdio()).await?;
 
-    info!("Server ready, waiting for connections");
+    info!(
+        event = "server.ready",
+        "Server ready, waiting for connections"
+    );
     service.waiting().await?;
 
     Ok(())
+}
+
+/// Run HTTP health server for Docker health checks
+pub async fn run_health_server() -> Result<()> {
+    use std::net::SocketAddr;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpListener;
+
+    let port = std::env::var("HEALTH_PORT")
+        .unwrap_or_else(|_| "3000".into())
+        .parse::<u16>()
+        .unwrap_or(3000);
+
+    let addr = SocketAddr::from(([0, 0, 0, 0], port));
+    let listener = TcpListener::bind(&addr).await?;
+
+    info!(
+        event = "health.server.start",
+        port = port,
+        "Health server listening"
+    );
+
+    loop {
+        let (mut socket, _) = listener.accept().await?;
+
+        tokio::spawn(async move {
+            let mut buf = [0; 1024];
+
+            if let Ok(n) = socket.read(&mut buf).await {
+                let request = String::from_utf8_lossy(&buf[..n]);
+
+                // Parse HTTP request
+                let response = if request.starts_with("GET /health") {
+                    // Health check endpoint
+                    use crate::ntp::NtpSyncedClock;
+
+                    let ntp_status = NtpSyncedClock::get_status()
+                        .map(|s| {
+                            json!({
+                                "synced": s.synced,
+                                "offset_ms": s.offset_ms,
+                                "stratum": s.stratum
+                            })
+                        })
+                        .unwrap_or_else(|_| json!({"available": false}));
+
+                    let health = json!({
+                        "status": "healthy",
+                        "version": env!("CARGO_PKG_VERSION"),
+                        "service": "mcp-utc-time-server",
+                        "timestamp": chrono::Utc::now().to_rfc3339(),
+                        "ntp": ntp_status
+                    });
+
+                    format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n{}",
+                        serde_json::to_string_pretty(&health).unwrap_or_default()
+                    )
+                } else if request.starts_with("GET /metrics") {
+                    // Prometheus metrics endpoint
+                    let unix_time = crate::time::UnixTime::now();
+                    let metrics = format!(
+                        "# HELP mcp_time_seconds Current Unix timestamp\n\
+                         # TYPE mcp_time_seconds gauge\n\
+                         mcp_time_seconds {}\n\
+                         # HELP mcp_time_nanos Current nanoseconds component\n\
+                         # TYPE mcp_time_nanos gauge\n\
+                         mcp_time_nanos {}\n",
+                        unix_time.seconds, unix_time.nanos
+                    );
+                    format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\n{}",
+                        metrics
+                    )
+                } else {
+                    "HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n404 Not Found".to_string()
+                };
+
+                let _ = socket.write_all(response.as_bytes()).await;
+            }
+        });
+    }
 }
