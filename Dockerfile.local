@@ -1,0 +1,17 @@
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    tzdata \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd -g 1000 mcpuser && useradd -m -u 1000 -g 1000 mcpuser
+
+COPY target/release/mcp-utc-time-server /usr/local/bin/mcp-utc-time-server
+RUN chown mcpuser:mcpuser /usr/local/bin/mcp-utc-time-server
+USER mcpuser
+EXPOSE 3000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD /usr/bin/env bash -c 'if curl -sSf http://localhost:3000/health >/dev/null; then exit 0; else exit 1; fi'
+CMD ["/usr/local/bin/mcp-utc-time-server"]

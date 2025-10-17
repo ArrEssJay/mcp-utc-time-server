@@ -1,0 +1,16 @@
+# Ignore Rust build artifacts and other large or secret files
+target/**
+**/target/
+.git/
+.git/**
+.env*
+.env.local
+.vscode/
+node_modules/
+dist/
+/.terraform/
+**/.terraform/
+Cargo.lock
+
+# Dockerfile artifacts
+*.tar

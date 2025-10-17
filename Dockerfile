@@ -1,13 +1,15 @@
 # Standard Dockerfile (Cloud Deployment - No Hardware)
 # Multi-stage build for minimal runtime image
 
-FROM rust:1.75-alpine AS builder
+FROM rust:1.82-bullseye AS builder
 
-# Install build dependencies
-RUN apk add --no-cache \
-    musl-dev \
-    openssl-dev \
-    pkgconfig
+# Install build dependencies (Debian-based)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    pkg-config \
+    libssl-dev \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
 
@@ -22,17 +24,17 @@ COPY benches ./benches
 RUN cargo build --release --bin mcp-utc-time-server
 
 # Runtime stage
-FROM alpine:3.19
+FROM debian:bookworm-slim
 
-# Install runtime dependencies only
-RUN apk add --no-cache \
+# Runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     tzdata \
-    libgcc
+    libssl3 \
+    && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
-RUN addgroup -g 1000 mcpuser && \
-    adduser -D -u 1000 -G mcpuser mcpuser
+RUN groupadd -g 1000 mcpuser && useradd -m -u 1000 -g 1000 mcpuser
 
 # Copy binary from builder
 COPY --from=builder /build/target/release/mcp-utc-time-server /usr/local/bin/
@@ -46,9 +48,9 @@ USER mcpuser
 # Expose port
 EXPOSE 3000
 
-# Health check
+# Health check (use curl if available; busybox/curl not present by default)
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1
+    CMD /usr/bin/env bash -c 'if curl -sSf http://localhost:3000/health >/dev/null; then exit 0; else exit 1; fi'
 
 # Run server
 CMD ["/usr/local/bin/mcp-utc-time-server"]

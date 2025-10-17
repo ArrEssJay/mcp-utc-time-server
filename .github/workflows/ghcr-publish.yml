@@ -1,0 +1,36 @@
+name: Build and publish to GHCR
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+
+      - name: Build release binary
+        run: |
+          cargo build --release --bin mcp-utc-time-server
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image to GHCR
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: Dockerfile.local
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/mcp-utc-time-server:latest
