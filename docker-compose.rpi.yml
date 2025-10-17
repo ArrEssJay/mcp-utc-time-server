@@ -1,0 +1,86 @@
+version: '3.8'
+
+services:
+  mcp-time:
+    build:
+      context: .
+      dockerfile: Dockerfile.hardware
+    
+    image: ghcr.io/arressjay/mcp-utc-time-server:edge-armv7-latest
+    
+    container_name: mcp-time-server
+    
+    # Required for hardware access
+    privileged: true
+    
+    # Capabilities for time management and hardware
+    cap_add:
+      - SYS_TIME
+      - SYS_NICE
+      - NET_BIND_SERVICE
+      - SYS_RAWIO
+      - SYS_ADMIN
+    
+    # Device access for timing hardware
+    devices:
+      - /dev/pps0:/dev/pps0              # PPS input
+      - /dev/ttyAMA0:/dev/ttyAMA0        # GPS serial (Raspberry Pi)
+      - /dev/ttyUSB0:/dev/ttyUSB0        # USB GPS (if available)
+      - /dev/rtc0:/dev/rtc0              # Hardware RTC
+      - /dev/gpiomem:/dev/gpiomem        # GPIO memory access
+    
+    volumes:
+      # Persistent NTP drift file
+      - ntp-drift:/var/lib/ntp
+      # NTP statistics
+      - ntp-stats:/var/log/ntpstats
+      # Runtime configuration
+      - ./config/production:/etc/ntpsec/ntp.d:ro
+      # GPIO and PPS kernel interfaces
+      - /sys/class/gpio:/sys/class/gpio
+      - /sys/class/pps:/sys/class/pps
+      - /sys/devices:/sys/devices:ro
+    
+    environment:
+      # NTP Configuration
+      NTP_SERVERS: "${NTP_SERVERS:-0.pool.ntp.org,1.pool.ntp.org,time.cloudflare.com}"
+      ENABLE_PPS: "${ENABLE_PPS:-auto}"
+      ENABLE_GPS: "${ENABLE_GPS:-auto}"
+      PPS_GPIO: "${PPS_GPIO:-4}"
+      GPS_DEVICE: "${GPS_DEVICE:-/dev/ttyAMA0}"
+      GPS_BAUD: "${GPS_BAUD:-9600}"
+      LOCAL_STRATUM: "${LOCAL_STRATUM:-1}"
+      
+      # Application Configuration
+      RUST_LOG: "${RUST_LOG:-info}"
+      PORT: "${PORT:-8080}"
+      
+      # API Keys (provide via .env file)
+      API_KEY_1: "${API_KEY_1}"
+      API_KEY_2: "${API_KEY_2}"
+      API_KEY_ADMIN: "${API_KEY_ADMIN}"
+      
+      # Advanced NTP Options
+      NTP_STATS_ENABLED: "${NTP_STATS_ENABLED:-yes}"
+      NTP_HARDWARE_TIMESTAMPING: "${NTP_HARDWARE_TIMESTAMPING:-auto}"
+    
+    # Use host network for NTP (port 123)
+    network_mode: host
+    
+    restart: unless-stopped
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    
+    labels:
+      com.example.description: "MCP UTC Time Server with Hardware PPS/GPS"
+      com.example.version: "1.0.0"
+
+volumes:
+  ntp-drift:
+    driver: local
+  ntp-stats:
+    driver: local

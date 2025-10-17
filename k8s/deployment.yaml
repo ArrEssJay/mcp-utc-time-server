@@ -1,0 +1,157 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mcp-utc-time-server
+  namespace: default
+  labels:
+    app: mcp-utc-time
+    version: v1
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: mcp-utc-time
+  template:
+    metadata:
+      labels:
+        app: mcp-utc-time
+        version: v1
+    spec:
+      containers:
+      - name: mcp-server
+        image: ghcr.io/yourusername/mcp-utc-time-server:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 3000
+          name: http
+          protocol: TCP
+        env:
+        - name: RUST_LOG
+          value: "info"
+        - name: NTP_SERVERS
+          value: "time.cloudflare.com,time.google.com"
+        - name: LOCAL_STRATUM
+          value: "10"
+        - name: ENABLE_PPS
+          value: "no"
+        - name: ENABLE_GPS
+          value: "no"
+        - name: API_KEY_1
+          valueFrom:
+            secretKeyRef:
+              name: mcp-api-keys
+              key: api-key-1
+        - name: API_KEY_2
+          valueFrom:
+            secretKeyRef:
+              name: mcp-api-keys
+              key: api-key-2
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 10
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 2
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcp-utc-time-service
+  namespace: default
+  labels:
+    app: mcp-utc-time
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 3000
+    protocol: TCP
+    name: http
+  selector:
+    app: mcp-utc-time
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mcp-api-keys
+  namespace: default
+type: Opaque
+stringData:
+  api-key-1: "REPLACE_WITH_YOUR_KEY_1"
+  api-key-2: "REPLACE_WITH_YOUR_KEY_2"
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mcp-utc-time-ingress
+  namespace: default
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  tls:
+  - hosts:
+    - time-api.example.com
+    secretName: mcp-tls-cert
+  rules:
+  - host: time-api.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: mcp-utc-time-service
+            port:
+              number: 80
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: mcp-utc-time-hpa
+  namespace: default
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: mcp-utc-time-server
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80

@@ -1,0 +1,65 @@
+# Docker Compose for cloud deployment (no hardware)
+version: '3.8'
+
+services:
+  mcp-utc-time:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: mcp-utc-time-server:latest
+    container_name: mcp-utc-time
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      # Logging
+      - RUST_LOG=info
+      
+      # NTP Configuration
+      - NTP_SERVERS=time.cloudflare.com,time.google.com,time.nist.gov
+      - LOCAL_STRATUM=10
+      
+      # Disable hardware (cloud deployment)
+      - ENABLE_PPS=no
+      - ENABLE_GPS=no
+      - ENABLE_RTC=no
+      
+      # API Keys (use secrets in production)
+      - API_KEY_1=${API_KEY_1:-default-dev-key-1}
+      - API_KEY_2=${API_KEY_2:-default-dev-key-2}
+    
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    
+    networks:
+      - mcp-network
+    
+    # Security context
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+networks:
+  mcp-network:
+    driver: bridge
+
+# Production secrets example
+# Create .env file with:
+# API_KEY_1=your-secure-production-key-1
+# API_KEY_2=your-secure-production-key-2

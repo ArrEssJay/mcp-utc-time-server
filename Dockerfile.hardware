@@ -1,0 +1,79 @@
+# Multi-stage build for hardware-aware MCP Time Server
+FROM rust:1.75-alpine as builder
+
+WORKDIR /app
+
+# Install build dependencies
+RUN apk add --no-cache \
+    musl-dev \
+    openssl-dev \
+    pkgconfig
+
+# Copy manifests
+COPY Cargo.toml Cargo.lock ./
+
+# Copy source
+COPY src ./src
+
+# Build for musl target (static binary)
+RUN cargo build --release --target x86_64-unknown-linux-musl
+
+# Runtime stage with NTPsec and hardware support
+FROM alpine:3.19
+
+# Install NTPsec and hardware tools
+RUN apk add --no-cache \
+    ntpsec \
+    ntpsec-ntpdate \
+    ntpsec-utils \
+    gpsd \
+    gpsd-clients \
+    pps-tools \
+    bash \
+    curl \
+    jq \
+    supervisor \
+    ca-certificates
+
+# Create non-root user
+RUN adduser -D -u 1001 -s /bin/bash appuser
+
+# Copy application binary
+COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/mcp-utc-time-server /usr/local/bin/
+
+# Copy configuration scripts
+COPY scripts/configure-ntp.sh /usr/local/bin/
+COPY scripts/detect-hardware.sh /usr/local/bin/
+COPY scripts/entrypoint.sh /usr/local/bin/
+COPY scripts/health-check.sh /usr/local/bin/
+COPY config/ntp.conf.template /etc/ntpsec/
+COPY config/supervisor.conf /etc/supervisor/conf.d/mcp-time.conf
+
+# Make scripts executable
+RUN chmod +x /usr/local/bin/*.sh
+
+# Create required directories
+RUN mkdir -p \
+    /var/lib/ntp \
+    /var/log/ntpstats \
+    /etc/ntpsec/ntp.d \
+    /var/run/ntpsec
+
+# Set ownership
+RUN chown -R appuser:appuser \
+    /var/lib/ntp \
+    /var/log/ntpstats \
+    /etc/ntpsec/ntp.d \
+    /var/run/ntpsec
+
+# Volumes for persistence
+VOLUME ["/var/lib/ntp", "/var/log/ntpstats", "/etc/ntpsec/ntp.d"]
+
+# Expose ports
+EXPOSE 8080 123/udp
+
+# Health check
+HEALTHCHECK --interval=10s --timeout=3s --start-period=30s --retries=3 \
+    CMD /usr/local/bin/health-check.sh
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

@@ -1,0 +1,74 @@
+name: Deploy to Production
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to deploy'
+        required: true
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - staging
+          - production
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Validate Deployment Configuration
+        run: |
+          echo "Validating deployment for ${{ github.event.inputs.environment || 'production' }}"
+          
+      - name: Run Smoke Tests
+        run: |
+          cargo test --release --test smoke_test
+
+  deploy-azure:
+    needs: validate
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ github.event.inputs.environment || 'production' }}
+      url: https://time.api.${{ github.event.inputs.environment || 'production' }}.example.com
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      
+      - name: Deploy to Azure Container Apps
+        uses: Azure/container-apps-deploy-action@v1
+        with:
+          resource-group: mcp-${{ github.event.inputs.environment || 'prod' }}-rg
+          name: mcp-time-${{ github.event.inputs.environment || 'prod' }}
+          image: ghcr.io/${{ github.repository }}:${{ github.event.inputs.version || github.ref_name }}
+      
+      - name: Health Check
+        run: |
+          sleep 30
+          HEALTH_URL="https://time.api.${{ github.event.inputs.environment || 'production' }}.example.com/health"
+          curl -f -m 10 "$HEALTH_URL" || exit 1
+      
+      - name: Run Smoke Tests
+        run: |
+          ./scripts/smoke-test.sh https://time.api.${{ github.event.inputs.environment || 'production' }}.example.com
+
+  notify:
+    needs: deploy-azure
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Notify Deployment Status
+        run: |
+          echo "Deployment to ${{ github.event.inputs.environment || 'production' }} completed"
+          echo "Status: ${{ needs.deploy-azure.result }}"
