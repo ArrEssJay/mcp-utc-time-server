@@ -1,5 +1,7 @@
 # Ignore Rust build artifacts and other large or secret files
 target/**
+# But allow the release binary for Dockerfile.local
+!target/release/mcp-utc-time-server
 **/target/
 .git/
 .git/**
