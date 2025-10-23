@@ -1,9 +1,7 @@
-# Standard Dockerfile (Cloud Deployment - No Hardware)
-# Multi-stage build for minimal runtime image
+# Multi-stage build for GLIBC compatibility and NTPsec SHM support
+FROM rust:1.82-bookworm AS builder
 
-FROM rust:1.82-bullseye AS builder
-
-# Install build dependencies (Debian-based)
+# Install build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     pkg-config \
@@ -26,31 +24,32 @@ RUN cargo build --release --bin mcp-utc-time-server
 # Runtime stage
 FROM debian:bookworm-slim
 
-# Runtime dependencies
+# Install runtime dependencies including NTPsec for shared memory interface
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     tzdata \
+    curl \
     libssl3 \
+    ntpsec \
+    ntpsec-ntpdate \
     && rm -rf /var/lib/apt/lists/*
 
-# Create non-root user
+# Create non-privileged user
 RUN groupadd -g 1000 mcpuser && useradd -m -u 1000 -g 1000 mcpuser
 
 # Copy binary from builder
-COPY --from=builder /build/target/release/mcp-utc-time-server /usr/local/bin/
+COPY --from=builder /build/target/release/mcp-utc-time-server /usr/local/bin/mcp-utc-time-server
+RUN chmod +x /usr/local/bin/mcp-utc-time-server && \
+    chown mcpuser:mcpuser /usr/local/bin/mcp-utc-time-server
 
-# Set ownership
-RUN chown mcpuser:mcpuser /usr/local/bin/mcp-utc-time-server
+# Create NTP config directory
+RUN mkdir -p /etc/ntpsec && chown -R mcpuser:mcpuser /etc/ntpsec
 
-# Switch to non-root user
+# Copy NTP configuration template
+COPY config/ntp.conf.template /etc/ntpsec/ntp.conf.template
+
 USER mcpuser
-
-# Expose port
 EXPOSE 3000
-
-# Health check (use curl if available; busybox/curl not present by default)
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD /usr/bin/env bash -c 'if curl -sSf http://localhost:3000/health >/dev/null; then exit 0; else exit 1; fi'
-
-# Run server
+  CMD /usr/bin/env bash -c 'if curl -sSf http://localhost:3000/health >/dev/null; then exit 0; else exit 1; fi'
 CMD ["/usr/local/bin/mcp-utc-time-server"]
