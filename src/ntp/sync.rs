@@ -1,5 +1,28 @@
-// NTP-synchronized clock access
-use std::time::Duration;
+// NTP-synchronized clock access via NTPsec shared memory interface
+use libc::{shmat, shmdt, shmget, IPC_CREAT};
+use std::ptr;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+const NTP_SHM_SIZE: usize = 96;
+
+/// NTPsec shared memory structure for time exchange
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct NtpShmTime {
+    mode: i32,                    // 0: both RW, 1: RW by ntpd, RO by us
+    count: i32,                   // Updated each write
+    clock_time_sec: i64,          // Clock timestamp seconds
+    clock_time_usec: i32,         // Clock timestamp microseconds
+    receive_time_sec: i64,        // When timestamp was received
+    receive_time_usec: i32,       // Receive time microseconds
+    leap: i32,                    // Leap second indicator
+    precision: i32,               // Clock precision (log2 seconds)
+    nsamples: i32,                // Number of samples
+    valid: i32,                   // 0: invalid, 1: valid
+    clock_time_stamp_nsec: u32,   // Nanosecond resolution
+    receive_time_stamp_nsec: u32, // Nanosecond resolution
+    dummy: [i32; 8],              // Reserved for future use
+}
 
 #[derive(Debug, Clone)]
 pub struct NtpStatus {
@@ -9,11 +32,140 @@ pub struct NtpStatus {
     pub precision: i8,
     pub root_delay: f64,
     pub root_dispersion: f64,
+    pub shm_valid: bool,
+    pub pps_enabled: bool,
 }
 
-pub struct NtpSyncedClock;
+/// Shared memory interface to NTPsec
+pub struct NtpShmInterface {
+    shm_id: i32,
+    shm_ptr: *mut NtpShmTime,
+    unit: u8,
+}
+
+impl NtpShmInterface {
+    /// Create SHM interface for NTPsec unit 0-3
+    /// Unit 0 corresponds to SHM(0) in ntp.conf, uses key 0x4e545030
+    /// Unit 1 corresponds to SHM(1) in ntp.conf, uses key 0x4e545031, etc.
+    pub fn new(unit: u8) -> Result<Self, String> {
+        if unit > 3 {
+            return Err("SHM unit must be 0-3".to_string());
+        }
+
+        // NTPsec uses magic keys: 0x4e545030 + unit number
+        let key = 0x4e545030 + unit as i32;
+
+        unsafe {
+            // Get or create shared memory segment
+            let shm_id = shmget(key, NTP_SHM_SIZE, IPC_CREAT | 0o666);
+            if shm_id < 0 {
+                return Err(format!(
+                    "Failed to create SHM segment for unit {}: {}",
+                    unit,
+                    std::io::Error::last_os_error()
+                ));
+            }
+
+            // Attach to shared memory
+            let shm_ptr = shmat(shm_id, ptr::null(), 0) as *mut NtpShmTime;
+            if shm_ptr as isize == -1 {
+                return Err(format!(
+                    "Failed to attach SHM segment: {}",
+                    std::io::Error::last_os_error()
+                ));
+            }
+
+            // Initialize the structure if it's new
+            let shm = &mut *shm_ptr;
+            if shm.mode == 0 && shm.count == 0 {
+                *shm = NtpShmTime {
+                    mode: 1, // Mode 1: ntpd writes, we read
+                    count: 0,
+                    clock_time_sec: 0,
+                    clock_time_usec: 0,
+                    receive_time_sec: 0,
+                    receive_time_usec: 0,
+                    leap: 0,
+                    precision: -20, // Microsecond precision
+                    nsamples: 0,
+                    valid: 0,
+                    clock_time_stamp_nsec: 0,
+                    receive_time_stamp_nsec: 0,
+                    dummy: [0; 8],
+                };
+            }
+
+            Ok(NtpShmInterface {
+                shm_id,
+                shm_ptr,
+                unit,
+            })
+        }
+    }
+
+    /// Read current time data from shared memory
+    pub fn read_time(&self) -> Option<(i64, u32, bool)> {
+        unsafe {
+            let shm = &*self.shm_ptr;
+
+            if shm.valid == 0 {
+                return None;
+            }
+
+            // Memory barrier to ensure reads are consistent
+            std::sync::atomic::fence(std::sync::atomic::Ordering::SeqCst);
+
+            Some((
+                shm.clock_time_sec,
+                shm.clock_time_stamp_nsec,
+                shm.valid == 1,
+            ))
+        }
+    }
+
+    /// Get the unit number
+    pub fn unit(&self) -> u8 {
+        self.unit
+    }
+
+    /// Check if the shared memory has valid data
+    pub fn is_valid(&self) -> bool {
+        unsafe {
+            let shm = &*self.shm_ptr;
+            shm.valid == 1
+        }
+    }
+}
+
+impl Drop for NtpShmInterface {
+    fn drop(&mut self) {
+        unsafe {
+            shmdt(self.shm_ptr as *const libc::c_void);
+        }
+    }
+}
+
+unsafe impl Send for NtpShmInterface {}
+unsafe impl Sync for NtpShmInterface {}
+
+pub struct NtpSyncedClock {
+    shm: Option<NtpShmInterface>,
+}
 
 impl NtpSyncedClock {
+    /// Create a new NTP synced clock with optional SHM interface
+    pub fn new() -> Self {
+        // Try to connect to SHM(0) by default
+        let shm = NtpShmInterface::new(0).ok();
+        Self { shm }
+    }
+
+    /// Create with specific SHM unit
+    pub fn with_shm_unit(unit: u8) -> Result<Self, String> {
+        let shm = NtpShmInterface::new(unit)?;
+        Ok(Self { shm: Some(shm) })
+    }
+
     /// Get high-precision system time using clock_gettime
     pub fn now() -> Result<(i64, u32), std::io::Error> {
         #[cfg(unix)]
@@ -36,12 +188,24 @@ impl NtpSyncedClock {
 
         #[cfg(not(unix))]
         {
-            let now = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
+            let now = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
 
             Ok((now.as_secs() as i64, now.subsec_nanos()))
         }
+    }
+
+    /// Get time from SHM if available, otherwise fallback to system time
+    pub fn now_synced(&self) -> Result<(i64, u32), std::io::Error> {
+        if let Some(ref shm) = self.shm {
+            if let Some((secs, nanos, _)) = shm.read_time() {
+                return Ok((secs, nanos));
+            }
+        }
+
+        // Fallback to system time
+        Self::now()
     }
 
     /// Wait for NTP synchronization
@@ -75,14 +239,17 @@ impl NtpSyncedClock {
         Ok(stdout.lines().any(|line| line.starts_with('*')))
     }
 
-    /// Get NTP status information
-    pub fn get_status() -> Result<NtpStatus, String> {
+    /// Get NTP status information with SHM validation
+    pub fn get_status(&self) -> Result<NtpStatus, String> {
         let output = std::process::Command::new("ntpq")
             .args(["-c", "rv"])
             .output()
             .map_err(|e| format!("Failed to get NTP status: {}", e))?;
 
         let stdout = String::from_utf8_lossy(&output.stdout);
+
+        let shm_valid = self.shm.as_ref().map(|s| s.is_valid()).unwrap_or(false);
+        let pps_enabled = stdout.contains("pps") || stdout.contains("PPS");
 
         let mut status = NtpStatus {
             synced: Self::is_synced().unwrap_or(false),
@@ -91,6 +258,8 @@ impl NtpSyncedClock {
             precision: 0,
             root_delay: 0.0,
             root_dispersion: 0.0,
+            shm_valid,
+            pps_enabled,
         };
 
         // Parse NTP variables
@@ -124,9 +293,15 @@ impl NtpSyncedClock {
     }
 
     /// Get NTP offset in microseconds
-    pub fn get_offset_us() -> Result<i64, String> {
-        let status = Self::get_status()?;
+    pub fn get_offset_us(&self) -> Result<i64, String> {
+        let status = self.get_status()?;
         Ok((status.offset_ms * 1000.0) as i64)
+    }
+}
+
+impl Default for NtpSyncedClock {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

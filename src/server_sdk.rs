@@ -207,12 +207,17 @@ impl TimeServer {
         )]))
     }
 
-    /// Get NTP synchronization status (read-only)
-    #[tool(description = "Get NTP synchronization status and performance metrics (read-only)")]
+    /// Get NTP synchronization status (read-only) via shared memory interface
+    #[tool(
+        description = "Get NTP synchronization status and performance metrics (read-only). Includes hardware clock (PPS) status if available."
+    )]
     async fn get_ntp_status(&self) -> Result<CallToolResult, McpError> {
-        debug!("Tool: get_ntp_status");
+        debug!("Tool: get_ntp_status (SHM interface)");
 
         use crate::ntp::NtpSyncedClock;
+
+        // Create NTP clock instance with SHM interface
+        let ntp_clock = NtpSyncedClock::new();
 
         // Check if NTP is available
         let is_synced = NtpSyncedClock::is_synced().unwrap_or(false);
@@ -221,7 +226,8 @@ impl TimeServer {
             let result = json!({
                 "available": false,
                 "message": "NTP not available or not synchronized",
-                "synced": false
+                "synced": false,
+                "shm_interface": "not_connected"
             });
             return Ok(CallToolResult::success(vec![Content::text(
                 serde_json::to_string_pretty(&result)
@@ -229,8 +235,8 @@ impl TimeServer {
             )]));
         }
 
-        // Get detailed NTP status
-        match NtpSyncedClock::get_status() {
+        // Get detailed NTP status including SHM and PPS info
+        match ntp_clock.get_status() {
             Ok(status) => {
                 let result = json!({
                     "available": true,
@@ -240,6 +246,10 @@ impl TimeServer {
                     "precision": status.precision,
                     "root_delay": status.root_delay,
                     "root_dispersion": status.root_dispersion,
+                    "shm_valid": status.shm_valid,
+                    "pps_enabled": status.pps_enabled,
+                    "shm_interface": if status.shm_valid { "connected" } else { "disconnected" },
+                    "hardware_clock": if status.pps_enabled { "PPS active" } else { "PPS inactive" },
                     "health": if status.synced && status.offset_ms.abs() < 100.0 {
                         "healthy"
                     } else if status.synced {
@@ -257,7 +267,8 @@ impl TimeServer {
                 let result = json!({
                     "available": false,
                     "error": e,
-                    "synced": false
+                    "synced": false,
+                    "shm_interface": "error"
                 });
                 Ok(CallToolResult::success(vec![Content::text(
                     serde_json::to_string_pretty(&result)
@@ -472,12 +483,16 @@ pub async fn run_health_server() -> Result<()> {
                     // Health check endpoint
                     use crate::ntp::NtpSyncedClock;
 
-                    let ntp_status = NtpSyncedClock::get_status()
+                    let ntp_clock = NtpSyncedClock::new();
+                    let ntp_status = ntp_clock
+                        .get_status()
                         .map(|s| {
                             json!({
                                 "synced": s.synced,
                                 "offset_ms": s.offset_ms,
-                                "stratum": s.stratum
+                                "stratum": s.stratum,
+                                "shm_valid": s.shm_valid,
+                                "pps_enabled": s.pps_enabled
                             })
                         })
                         .unwrap_or_else(|_| json!({"available": false}));
