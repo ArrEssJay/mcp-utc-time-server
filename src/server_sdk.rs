@@ -518,7 +518,7 @@ pub async fn run() -> Result<()> {
     Ok(())
 }
 
-/// Run HTTP health server for Docker health checks
+/// Run HTTP API server for health checks and MCP operations
 pub async fn run_health_server() -> Result<()> {
     use std::net::SocketAddr;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -533,71 +533,216 @@ pub async fn run_health_server() -> Result<()> {
     let listener = TcpListener::bind(&addr).await?;
 
     info!(
-        event = "health.server.start",
+        event = "http.server.start",
         port = port,
-        "Health server listening"
+        "HTTP API server listening"
     );
 
+    let server = TimeServer::new();
+
     loop {
-        let (mut socket, _) = listener.accept().await?;
+        let (mut socket, peer_addr) = listener.accept().await?;
+        let server_clone = server.clone();
 
         tokio::spawn(async move {
-            let mut buf = [0; 1024];
+            let mut buf = vec![0u8; 8192];
 
-            if let Ok(n) = socket.read(&mut buf).await {
-                let request = String::from_utf8_lossy(&buf[..n]);
+            match tokio::time::timeout(
+                std::time::Duration::from_secs(5),
+                socket.read(&mut buf)
+            ).await {
+                Ok(Ok(n)) if n > 0 => {
+                    let request = String::from_utf8_lossy(&buf[..n]);
+                    debug!(event = "http.request", peer = %peer_addr, request = %request.lines().next().unwrap_or(""));
 
-                // Parse HTTP request
-                let response = if request.starts_with("GET /health") {
-                    // Health check endpoint
-                    use crate::ntp::NtpSyncedClock;
+                    let response = handle_http_request(&request, &server_clone).await;
 
-                    let ntp_clock = NtpSyncedClock::new();
-                    let ntp_status = match ntp_clock.get_status_async().await {
-                        Ok(s) => json!({
-                            "synced": s.synced,
-                            "offset_ms": s.offset_ms,
-                            "stratum": s.stratum,
-                            "shm_valid": s.shm_valid,
-                            "pps_enabled": s.pps_enabled
-                        }),
-                        Err(_) => json!({"available": false}),
-                    };
-
-                    let health = json!({
-                        "status": "healthy",
-                        "version": env!("CARGO_PKG_VERSION"),
-                        "service": "mcp-utc-time-server",
-                        "timestamp": chrono::Utc::now().to_rfc3339(),
-                        "ntp": ntp_status
-                    });
-
-                    format!(
-                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n{}",
-                        serde_json::to_string_pretty(&health).unwrap_or_default()
-                    )
-                } else if request.starts_with("GET /metrics") {
-                    // Prometheus metrics endpoint
-                    let unix_time = crate::time::UnixTime::now();
-                    let metrics = format!(
-                        "# HELP mcp_time_seconds Current Unix timestamp\n\
-                         # TYPE mcp_time_seconds gauge\n\
-                         mcp_time_seconds {}\n\
-                         # HELP mcp_time_nanos Current nanoseconds component\n\
-                         # TYPE mcp_time_nanos gauge\n\
-                         mcp_time_nanos {}\n",
-                        unix_time.seconds, unix_time.nanos
-                    );
-                    format!(
-                        "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\n{}",
-                        metrics
-                    )
-                } else {
-                    "HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n404 Not Found".to_string()
-                };
-
-                let _ = socket.write_all(response.as_bytes()).await;
+                    if let Err(e) = socket.write_all(response.as_bytes()).await {
+                        debug!(event = "http.write_error", error = %e, peer = %peer_addr);
+                    }
+                }
+                Ok(Ok(_)) => {
+                    debug!(event = "http.empty_request", peer = %peer_addr);
+                }
+                Ok(Err(e)) => {
+                    debug!(event = "http.read_error", error = %e, peer = %peer_addr);
+                }
+                Err(_) => {
+                    debug!(event = "http.timeout", peer = %peer_addr);
+                    let response = "HTTP/1.1 408 Request Timeout\r\nConnection: close\r\n\r\n";
+                    let _ = socket.write_all(response.as_bytes()).await;
+                }
             }
+
+            let _ = socket.shutdown().await;
         });
     }
+}
+
+async fn handle_http_request(request: &str, _server: &TimeServer) -> String {
+    use crate::ntp::NtpSyncedClock;
+
+    let lines: Vec<&str> = request.lines().collect();
+    if lines.is_empty() {
+        return "HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n".to_string();
+    }
+
+    let parts: Vec<&str> = lines[0].split_whitespace().collect();
+    if parts.len() < 2 {
+        return "HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n".to_string();
+    }
+
+    let method = parts[0];
+    let path = parts[1];
+
+    match (method, path) {
+        ("GET", "/health") | ("GET", "/") => {
+            let ntp_clock = NtpSyncedClock::new();
+            let ntp_status = match ntp_clock.get_status_async().await {
+                Ok(s) => json!({
+                    "synced": s.synced,
+                    "offset_ms": s.offset_ms,
+                    "stratum": s.stratum,
+                    "shm_valid": s.shm_valid,
+                    "pps_enabled": s.pps_enabled
+                }),
+                Err(_) => json!({"available": false}),
+            };
+
+            let health = json!({
+                "status": "healthy",
+                "version": env!("CARGO_PKG_VERSION"),
+                "service": "mcp-utc-time-server",
+                "timestamp": chrono::Utc::now().to_rfc3339(),
+                "ntp": ntp_status
+            });
+
+            http_json_response(200, "OK", &health)
+        }
+        ("GET", "/metrics") => {
+            let unix_time = crate::time::UnixTime::now();
+            let metrics = format!(
+                "# HELP mcp_time_seconds Current Unix timestamp\n\
+                 # TYPE mcp_time_seconds gauge\n\
+                 mcp_time_seconds {}\n\
+                 # HELP mcp_time_nanos Current nanoseconds component\n\
+                 # TYPE mcp_time_nanos gauge\n\
+                 mcp_time_nanos {}\n",
+                unix_time.seconds, unix_time.nanos
+            );
+            http_text_response(200, "OK", &metrics, "text/plain")
+        }
+        ("GET", "/api/time") => {
+            let response = EnhancedTimeResponse::now();
+            http_json_response(200, "OK", &response)
+        }
+        ("GET", "/api/unix") => {
+            let unix_time = crate::time::UnixTime::now();
+            http_json_response(200, "OK", &unix_time)
+        }
+        ("GET", "/api/nanos") => {
+            let unix_time = crate::time::UnixTime::now();
+            let result = json!({
+                "nanoseconds": unix_time.nanos_since_epoch,
+                "seconds": unix_time.seconds,
+                "subsec_nanos": unix_time.nanos,
+            });
+            http_json_response(200, "OK", &result)
+        }
+        ("GET", "/api/timezones") => {
+            let timezones = crate::time::TimezoneConverter::list_timezones();
+            let result = json!({
+                "timezones": timezones,
+                "count": timezones.len(),
+            });
+            http_json_response(200, "OK", &result)
+        }
+        ("GET", path) if path.starts_with("/api/time/timezone/") => {
+            let tz = &path[19..]; // Skip "/api/time/timezone/"
+            match EnhancedTimeResponse::with_timezone(tz) {
+                Ok(response) => http_json_response(200, "OK", &response),
+                Err(e) => {
+                    let error = json!({"error": e});
+                    http_json_response(400, "Bad Request", &error)
+                }
+            }
+        }
+        ("GET", "/api/ntp/status") => {
+            let ntp_clock = NtpSyncedClock::new();
+            if NtpSyncedClock::is_container_environment() {
+                let result = json!({
+                    "available": false,
+                    "message": "NTP not available in container environment",
+                    "container_mode": true
+                });
+                http_json_response(200, "OK", &result)
+            } else {
+                match ntp_clock.get_status_async().await {
+                    Ok(status) => {
+                        let result = json!({
+                            "available": true,
+                            "synced": status.synced,
+                            "offset_ms": status.offset_ms,
+                            "stratum": status.stratum,
+                            "precision": status.precision,
+                            "root_delay": status.root_delay,
+                            "root_dispersion": status.root_dispersion,
+                            "shm_valid": status.shm_valid,
+                            "pps_enabled": status.pps_enabled,
+                        });
+                        http_json_response(200, "OK", &result)
+                    }
+                    Err(e) => {
+                        let error = json!({"error": e});
+                        http_json_response(500, "Internal Server Error", &error)
+                    }
+                }
+            }
+        }
+        _ => {
+            let error = json!({
+                "error": "Not Found",
+                "path": path,
+                "available_endpoints": [
+                    "/health",
+                    "/metrics",
+                    "/api/time",
+                    "/api/unix",
+                    "/api/nanos",
+                    "/api/timezones",
+                    "/api/time/timezone/:tz",
+                    "/api/ntp/status"
+                ]
+            });
+            http_json_response(404, "Not Found", &error)
+        }
+    }
+}
+
+fn http_json_response(status: u16, status_text: &str, body: &impl serde::Serialize) -> String {
+    let json = serde_json::to_string_pretty(body).unwrap_or_else(|_| "{}".to_string());
+    let content_length = json.len();
+    format!(
+        "HTTP/1.1 {} {}\r\n\
+         Content-Type: application/json\r\n\
+         Content-Length: {}\r\n\
+         Connection: close\r\n\
+         Access-Control-Allow-Origin: *\r\n\
+         \r\n\
+         {}",
+        status, status_text, content_length, json
+    )
+}
+
+fn http_text_response(status: u16, status_text: &str, body: &str, content_type: &str) -> String {
+    let content_length = body.len();
+    format!(
+        "HTTP/1.1 {} {}\r\n\
+         Content-Type: {}\r\n\
+         Content-Length: {}\r\n\
+         Connection: close\r\n\
+         \r\n\
+         {}",
+        status, status_text, content_type, content_length, body
+    )
 }
