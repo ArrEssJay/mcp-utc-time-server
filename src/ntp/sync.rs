@@ -2,6 +2,8 @@
 use libc::{shmat, shmdt, shmget, IPC_CREAT};
 use std::ptr;
 use std::time::Duration;
+use tokio::process::Command;
+use tokio::time::timeout;
 
 const NTP_SHM_SIZE: usize = 96;
 
@@ -154,6 +156,14 @@ pub struct NtpSyncedClock {
 }
 
 impl NtpSyncedClock {
+    /// Check if running in a container environment
+    pub fn is_container_environment() -> bool {
+        std::path::Path::new("/.dockerenv").exists()
+            || std::env::var("KUBERNETES_SERVICE_HOST").is_ok()
+            || std::env::var("CONTAINER_APP_NAME").is_ok()
+            || std::env::var("SKIP_NTP_CHECK").is_ok()
+    }
+
     /// Create a new NTP synced clock with optional SHM interface
     pub fn new() -> Self {
         // Try to connect to SHM(0) by default
@@ -210,15 +220,15 @@ impl NtpSyncedClock {
     }
 
     /// Wait for NTP synchronization
-    pub async fn wait_for_sync(timeout: Duration) -> Result<(), String> {
+    pub async fn wait_for_sync(timeout_duration: Duration) -> Result<(), String> {
         let start = tokio::time::Instant::now();
 
         loop {
-            if Self::is_synced()? {
+            if Self::is_synced_async().await? {
                 return Ok(());
             }
 
-            if start.elapsed() > timeout {
+            if start.elapsed() > timeout_duration {
                 return Err("NTP sync timeout".to_string());
             }
 
@@ -226,13 +236,33 @@ impl NtpSyncedClock {
         }
     }
 
-    /// Check NTP synchronization status
-    pub fn is_synced() -> Result<bool, String> {
-        // Try to execute ntpq to check sync status
-        let output = std::process::Command::new("ntpq")
-            .args(["-p", "-n"])
-            .output()
-            .map_err(|e| format!("Failed to check NTP status: {}", e))?;
+    /// Check NTP synchronization status (async, container-aware)
+    pub async fn is_synced_async() -> Result<bool, String> {
+        // In containers, skip NTP check
+        if Self::is_container_environment() {
+            tracing::debug!("Container environment detected, skipping NTP check");
+            return Ok(false);
+        }
+
+        // Add timeout to prevent indefinite hangs
+        let result = timeout(
+            Duration::from_secs(2),
+            Command::new("ntpq").args(["-p", "-n"]).output(),
+        )
+        .await;
+
+        let output = match result {
+            Ok(Ok(output)) => output,
+            Ok(Err(e)) if e.kind() == std::io::ErrorKind::NotFound => {
+                tracing::warn!("ntpq not found, assuming not synced");
+                return Ok(false);
+            }
+            Ok(Err(e)) => return Err(format!("Failed to check NTP status: {}", e)),
+            Err(_) => {
+                tracing::warn!("ntpq command timed out");
+                return Ok(false);
+            }
+        };
 
         let stdout = String::from_utf8_lossy(&output.stdout);
 
@@ -240,12 +270,69 @@ impl NtpSyncedClock {
         Ok(stdout.lines().any(|line| line.starts_with('*')))
     }
 
-    /// Get NTP status information with SHM validation
-    pub fn get_status(&self) -> Result<NtpStatus, String> {
-        let output = std::process::Command::new("ntpq")
-            .args(["-c", "rv"])
-            .output()
-            .map_err(|e| format!("Failed to get NTP status: {}", e))?;
+    /// Check NTP synchronization status (deprecated blocking version)
+    #[deprecated(note = "Use is_synced_async() instead to avoid blocking")]
+    pub fn is_synced() -> Result<bool, String> {
+        // Fallback for backward compatibility
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(Self::is_synced_async())
+        })
+    }
+
+    /// Get NTP status information (async, container-aware)
+    pub async fn get_status_async(&self) -> Result<NtpStatus, String> {
+        // In container environment, return minimal status
+        if Self::is_container_environment() {
+            tracing::debug!("Container environment: returning degraded NTP status");
+            return Ok(NtpStatus {
+                synced: true, // Assume host time is good
+                offset_ms: 0.0,
+                stratum: 3, // Assume container host is synced
+                precision: -20,
+                root_delay: 0.0,
+                root_dispersion: 0.0,
+                shm_valid: false,
+                pps_enabled: false,
+            });
+        }
+
+        // Add timeout for ntpq command
+        let result = timeout(
+            Duration::from_secs(2),
+            Command::new("ntpq").args(["-c", "rv"]).output(),
+        )
+        .await;
+
+        let output = match result {
+            Ok(Ok(output)) => output,
+            Ok(Err(e)) if e.kind() == std::io::ErrorKind::NotFound => {
+                tracing::warn!("ntpq not found, returning degraded status");
+                return Ok(NtpStatus {
+                    synced: false,
+                    offset_ms: 0.0,
+                    stratum: 16,
+                    precision: 0,
+                    root_delay: 0.0,
+                    root_dispersion: 0.0,
+                    shm_valid: self.shm.as_ref().map(|s| s.is_valid()).unwrap_or(false),
+                    pps_enabled: false,
+                });
+            }
+            Ok(Err(e)) => return Err(format!("Failed to get NTP status: {}", e)),
+            Err(_) => {
+                tracing::warn!("ntpq command timed out, returning degraded status");
+                return Ok(NtpStatus {
+                    synced: false,
+                    offset_ms: 0.0,
+                    stratum: 16,
+                    precision: 0,
+                    root_delay: 0.0,
+                    root_dispersion: 0.0,
+                    shm_valid: self.shm.as_ref().map(|s| s.is_valid()).unwrap_or(false),
+                    pps_enabled: false,
+                });
+            }
+        };
 
         let stdout = String::from_utf8_lossy(&output.stdout);
 
@@ -253,7 +340,7 @@ impl NtpSyncedClock {
         let pps_enabled = stdout.contains("pps") || stdout.contains("PPS");
 
         let mut status = NtpStatus {
-            synced: Self::is_synced().unwrap_or(false),
+            synced: Self::is_synced_async().await.unwrap_or(false),
             offset_ms: 0.0,
             stratum: 16,
             precision: 0,
@@ -293,10 +380,26 @@ impl NtpSyncedClock {
         Ok(status)
     }
 
-    /// Get NTP offset in microseconds
-    pub fn get_offset_us(&self) -> Result<i64, String> {
-        let status = self.get_status()?;
+    /// Get NTP status information (deprecated blocking version)
+    #[deprecated(note = "Use get_status_async() instead to avoid blocking")]
+    pub fn get_status(&self) -> Result<NtpStatus, String> {
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(self.get_status_async())
+        })
+    }
+
+    /// Get NTP offset in microseconds (async)
+    pub async fn get_offset_us_async(&self) -> Result<i64, String> {
+        let status = self.get_status_async().await?;
         Ok((status.offset_ms * 1000.0) as i64)
+    }
+
+    /// Get NTP offset in microseconds (deprecated blocking version)
+    #[deprecated(note = "Use get_offset_us_async() instead to avoid blocking")]
+    pub fn get_offset_us(&self) -> Result<i64, String> {
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(self.get_offset_us_async())
+        })
     }
 }
 

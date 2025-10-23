@@ -219,8 +219,8 @@ impl TimeServer {
         // Create NTP clock instance with SHM interface
         let ntp_clock = NtpSyncedClock::new();
 
-        // Check if NTP is available
-        let is_synced = NtpSyncedClock::is_synced().unwrap_or(false);
+        // Check if NTP is available (async)
+        let is_synced = NtpSyncedClock::is_synced_async().await.unwrap_or(false);
 
         if !is_synced {
             let result = json!({
@@ -236,7 +236,7 @@ impl TimeServer {
         }
 
         // Get detailed NTP status including SHM and PPS info
-        match ntp_clock.get_status() {
+        match ntp_clock.get_status_async().await {
             Ok(status) => {
                 let result = json!({
                     "available": true,
@@ -283,18 +283,59 @@ impl TimeServer {
     async fn get_ntp_peers(&self) -> Result<CallToolResult, McpError> {
         debug!("Tool: get_ntp_peers");
 
-        // Execute ntpq -p to get peer information
-        let output = std::process::Command::new("ntpq")
-            .args(["-p", "-n"])
-            .output();
+        use crate::ntp::NtpSyncedClock;
+        use std::time::Duration;
+        use tokio::process::Command;
+        use tokio::time::timeout;
 
-        match output {
-            Ok(output) if output.status.success() => {
+        // In container environment, return empty peer list
+        if NtpSyncedClock::is_container_environment() {
+            let result = json!({
+                "available": false,
+                "message": "NTP peers not available in container environment",
+                "peers": [],
+                "container_mode": true
+            });
+            return Ok(CallToolResult::success(vec![Content::text(
+                serde_json::to_string_pretty(&result)
+                    .map_err(|e| McpError::internal_error(e.to_string(), None))?,
+            )]));
+        }
+
+        // Execute ntpq -p with timeout to get peer information
+        let result = timeout(
+            Duration::from_secs(2),
+            Command::new("ntpq").args(["-p", "-n"]).output(),
+        )
+        .await;
+
+        match result {
+            Ok(Ok(output)) if output.status.success() => {
                 let stdout = String::from_utf8_lossy(&output.stdout);
                 let result = json!({
                     "available": true,
                     "peers": stdout.lines().collect::<Vec<_>>(),
                     "raw_output": stdout.to_string()
+                });
+                Ok(CallToolResult::success(vec![Content::text(
+                    serde_json::to_string_pretty(&result)
+                        .map_err(|e| McpError::internal_error(e.to_string(), None))?,
+                )]))
+            }
+            Ok(Err(e)) if e.kind() == std::io::ErrorKind::NotFound => {
+                let result = json!({
+                    "available": false,
+                    "error": "ntpq command not found"
+                });
+                Ok(CallToolResult::success(vec![Content::text(
+                    serde_json::to_string_pretty(&result)
+                        .map_err(|e| McpError::internal_error(e.to_string(), None))?,
+                )]))
+            }
+            Err(_) => {
+                let result = json!({
+                    "available": false,
+                    "error": "ntpq command timed out"
                 });
                 Ok(CallToolResult::success(vec![Content::text(
                     serde_json::to_string_pretty(&result)
@@ -484,18 +525,16 @@ pub async fn run_health_server() -> Result<()> {
                     use crate::ntp::NtpSyncedClock;
 
                     let ntp_clock = NtpSyncedClock::new();
-                    let ntp_status = ntp_clock
-                        .get_status()
-                        .map(|s| {
-                            json!({
-                                "synced": s.synced,
-                                "offset_ms": s.offset_ms,
-                                "stratum": s.stratum,
-                                "shm_valid": s.shm_valid,
-                                "pps_enabled": s.pps_enabled
-                            })
-                        })
-                        .unwrap_or_else(|_| json!({"available": false}));
+                    let ntp_status = match ntp_clock.get_status_async().await {
+                        Ok(s) => json!({
+                            "synced": s.synced,
+                            "offset_ms": s.offset_ms,
+                            "stratum": s.stratum,
+                            "shm_valid": s.shm_valid,
+                            "pps_enabled": s.pps_enabled
+                        }),
+                        Err(_) => json!({"available": false}),
+                    };
 
                     let health = json!({
                         "status": "healthy",
