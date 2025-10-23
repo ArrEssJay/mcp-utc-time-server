@@ -27,22 +27,16 @@ RUN cargo build --release --bin mcp-utc-time-server
 # Runtime stage
 FROM debian:bookworm-slim
 
-# Install runtime dependencies including NTP tools
+# Install runtime dependencies (NTP not needed in container - time comes from host)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     tzdata \
     curl \
     libssl3 \
-    ntp \
     && rm -rf /var/lib/apt/lists/*
 
-# Verify ntpq is available, create stub if missing
-RUN if ! command -v ntpq &> /dev/null; then \
-    echo '#!/bin/sh' > /usr/bin/ntpq && \
-    echo 'echo "NTP query tool not available"' >> /usr/bin/ntpq && \
-    echo 'exit 1' >> /usr/bin/ntpq && \
-    chmod +x /usr/bin/ntpq; \
-    fi
+# Set environment variable to indicate container environment
+ENV CONTAINER_APP_NAME=mcp-utc-time-server
 
 # Create non-privileged user
 RUN groupadd -g 1000 mcpuser && useradd -m -u 1000 -g 1000 mcpuser
@@ -55,8 +49,10 @@ RUN chmod +x /usr/local/bin/mcp-utc-time-server && \
 # Create NTP config directory
 RUN mkdir -p /etc/ntpsec && chown -R mcpuser:mcpuser /etc/ntpsec
 
-# Copy NTP configuration template
-COPY config/ntp.conf.template /etc/ntpsec/ntp.conf.template
+# Note: NTP daemon is not run in containers
+# - Container time comes from the host
+# - NTP SHM segments won't be available
+# - The code detects container environment and skips NTP checks
 
 USER mcpuser
 EXPOSE 3000

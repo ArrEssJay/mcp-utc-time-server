@@ -57,6 +57,12 @@ impl TimeServer {
             prompt_router: Self::prompt_router(),
         }
     }
+
+    /// Check if NTP tools are available (not in container)
+    fn is_ntp_available() -> bool {
+        use crate::ntp::NtpSyncedClock;
+        !NtpSyncedClock::is_container_environment()
+    }
 }
 
 impl Default for TimeServer {
@@ -215,6 +221,21 @@ impl TimeServer {
         debug!("Tool: get_ntp_status (SHM interface)");
 
         use crate::ntp::NtpSyncedClock;
+
+        // In container environments, NTP is not available
+        if NtpSyncedClock::is_container_environment() {
+            let result = json!({
+                "available": false,
+                "message": "NTP not available in container environment. Container uses host system time.",
+                "container_mode": true,
+                "synced": false,
+                "shm_interface": "not_available"
+            });
+            return Ok(CallToolResult::success(vec![Content::text(
+                serde_json::to_string_pretty(&result)
+                    .map_err(|e| McpError::internal_error(e.to_string(), None))?,
+            )]));
+        }
 
         // Create NTP clock instance with SHM interface
         let ntp_clock = NtpSyncedClock::new();
@@ -447,6 +468,19 @@ impl TimeServer {
 #[prompt_handler]
 impl ServerHandler for TimeServer {
     fn get_info(&self) -> ServerInfo {
+        let ntp_available = Self::is_ntp_available();
+        let instructions = if ntp_available {
+            "MCP UTC Time Server - Provides high-precision time, timezone, and NTP status services.\n\n\
+             Time Tools: get_time, get_unix_time, get_nanos, get_time_formatted, get_time_with_timezone, list_timezones, convert_time\n\
+             NTP Tools: get_ntp_status, get_ntp_peers (hardware/bare-metal only)\n\
+             Prompts: /time, /unix_time, /time_in <timezone>, /format_time <format>".to_string()
+        } else {
+            "MCP UTC Time Server - Provides high-precision time and timezone services.\n\n\
+             Time Tools: get_time, get_unix_time, get_nanos, get_time_formatted, get_time_with_timezone, list_timezones, convert_time\n\
+             Prompts: /time, /unix_time, /time_in <timezone>, /format_time <format>\n\n\
+             Note: Running in container mode. NTP tools not available - container uses host system time.".to_string()
+        };
+
         ServerInfo {
             protocol_version: ProtocolVersion::LATEST,
             capabilities: ServerCapabilities::builder()
@@ -458,13 +492,7 @@ impl ServerHandler for TimeServer {
                 version: env!("CARGO_PKG_VERSION").into(),
                 ..Default::default()
             },
-            instructions: Some(
-                "MCP UTC Time Server - Provides high-precision time, timezone, and NTP status services.\n\n\
-                 Time Tools: get_time, get_unix_time, get_nanos, get_time_formatted, get_time_with_timezone, list_timezones, convert_time\n\
-                 NTP Tools: get_ntp_status, get_ntp_peers\n\
-                 Prompts: /time, /unix_time, /time_in <timezone>, /format_time <format>"
-                    .into(),
-            ),
+            instructions: Some(instructions),
         }
     }
 }
