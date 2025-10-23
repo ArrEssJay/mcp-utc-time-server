@@ -61,37 +61,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          profile: minimal
-
-      - name: Cache cargo registry
-        uses: actions/cache@v3
-        with:
-          path: ~/.cargo/registry
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Cache cargo index
-        uses: actions/cache@v3
-        with:
-          path: ~/.cargo/git
-          key: ${{ runner.os }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Cache target directory
-        uses: actions/cache@v3
-        with:
-          path: target
-          key: ${{ runner.os }}-target-release-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Build release binary
-        run: |
-          cargo build --release --bin mcp-utc-time-server
-          # Copy binary to root for Docker build
-          cp target/release/mcp-utc-time-server ./mcp-utc-time-server
-          ls -lh mcp-utc-time-server
-
       - name: Prepare image name
         id: image
         run: |
@@ -108,7 +77,7 @@ jobs:
         uses: docker/build-push-action@v4
         with:
           context: .
-          file: Dockerfile.local
+          file: Dockerfile
           push: true
           tags: ${{ steps.image.outputs.name }}
 
@@ -144,13 +113,12 @@ jobs:
           echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- **Image**: \`${{ steps.image.outputs.name }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **Binary Size**: $(ls -lh mcp-utc-time-server | awk '{print $5}')" >> $GITHUB_STEP_SUMMARY
           echo "- **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Branch**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Azure Deployment" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Deploy to Azure Container Apps:" >> $GITHUB_STEP_SUMMARY
+          echo "Pull and deploy to Azure Container Apps:" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
           echo "az containerapp update \\" >> $GITHUB_STEP_SUMMARY
           echo "  --name mcp-utc-time \\" >> $GITHUB_STEP_SUMMARY
