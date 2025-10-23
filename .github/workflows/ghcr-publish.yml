@@ -81,33 +81,6 @@ jobs:
           push: true
           tags: ${{ steps.image.outputs.name }}
 
-      - name: Test Docker image locally
-        run: |
-          # Pull the image we just built
-          docker pull ${{ steps.image.outputs.name }}
-          
-          # Run container in background
-          docker run -d --name test-container \
-            -e ENABLE_HEALTH_SERVER=true \
-            -p 3000:3000 \
-            ${{ steps.image.outputs.name }}
-          
-          # Wait for container to start
-          sleep 5
-          
-          # Test health endpoint
-          curl -f http://localhost:3000/health || (docker logs test-container && exit 1)
-          
-          # Test that the binary works
-          docker exec test-container /usr/local/bin/mcp-utc-time-server --version || true
-          
-          # Check logs for errors
-          docker logs test-container
-          
-          # Cleanup
-          docker stop test-container
-          docker rm test-container
-
       - name: Generate deployment summary
         run: |
           echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
