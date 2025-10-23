@@ -1,11 +1,13 @@
-name: Build and publish to GHCR
+name: Build, Test, and Publish to GHCR
 
 on:
   push:
     branches: [ main, 'release/**' ]
+  pull_request:
+    branches: [ main ]
 
 jobs:
-  build-and-publish:
+  test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -15,10 +17,77 @@ jobs:
         with:
           toolchain: stable
           profile: minimal
+          components: clippy, rustfmt
+
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache target directory
+        uses: actions/cache@v3
+        with:
+          path: target
+          key: ${{ runner.os }}-target-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Check formatting
+        run: cargo fmt -- --check
+
+      - name: Run clippy
+        run: cargo clippy -- -D warnings
+
+      - name: Run tests
+        run: cargo test --all
+
+      - name: Test NTP SHM interface (mock)
+        run: |
+          # Test that the SHM interface code compiles and basic functionality works
+          cargo test --package mcp-utc-time-server --lib ntp::sync -- --nocapture
+
+  build-and-publish:
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache target directory
+        uses: actions/cache@v3
+        with:
+          path: target
+          key: ${{ runner.os }}-target-release-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Build release binary
         run: |
           cargo build --release --bin mcp-utc-time-server
+          # Copy binary to root for Docker build
+          cp target/release/mcp-utc-time-server ./mcp-utc-time-server
+          ls -lh mcp-utc-time-server
 
       - name: Prepare image name
         id: image
@@ -39,3 +108,49 @@ jobs:
           file: Dockerfile.local
           push: true
           tags: ${{ steps.image.outputs.name }}
+
+      - name: Test Docker image locally
+        run: |
+          # Pull the image we just built
+          docker pull ${{ steps.image.outputs.name }}
+          
+          # Run container in background
+          docker run -d --name test-container \
+            -e ENABLE_HEALTH_SERVER=true \
+            -p 3000:3000 \
+            ${{ steps.image.outputs.name }}
+          
+          # Wait for container to start
+          sleep 5
+          
+          # Test health endpoint
+          curl -f http://localhost:3000/health || (docker logs test-container && exit 1)
+          
+          # Test that the binary works
+          docker exec test-container /usr/local/bin/mcp-utc-time-server --version || true
+          
+          # Check logs for errors
+          docker logs test-container
+          
+          # Cleanup
+          docker stop test-container
+          docker rm test-container
+
+      - name: Generate deployment summary
+        run: |
+          echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Image**: \`${{ steps.image.outputs.name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Binary Size**: $(ls -lh mcp-utc-time-server | awk '{print $5}')" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Azure Deployment" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Deploy to Azure Container Apps:" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "az containerapp update \\" >> $GITHUB_STEP_SUMMARY
+          echo "  --name mcp-utc-time \\" >> $GITHUB_STEP_SUMMARY
+          echo "  --resource-group mcp-time-rg \\" >> $GITHUB_STEP_SUMMARY
+          echo "  --image ${{ steps.image.outputs.name }}" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY

@@ -1,15 +1,27 @@
 FROM debian:bookworm-slim
 
+# Install runtime dependencies including NTPsec for shared memory interface
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     tzdata \
     curl \
+    ntpsec \
+    ntpsec-ntpdate \
     && rm -rf /var/lib/apt/lists/*
 
+# Create non-privileged user
 RUN groupadd -g 1000 mcpuser && useradd -m -u 1000 -g 1000 mcpuser
 
-COPY target/release/mcp-utc-time-server /usr/local/bin/mcp-utc-time-server
-RUN chown mcpuser:mcpuser /usr/local/bin/mcp-utc-time-server
+# Copy pre-built binary from GitHub Actions
+COPY mcp-utc-time-server /usr/local/bin/mcp-utc-time-server
+RUN chmod +x /usr/local/bin/mcp-utc-time-server && \
+    chown mcpuser:mcpuser /usr/local/bin/mcp-utc-time-server
+
+# Create NTP config directory
+RUN mkdir -p /etc/ntpsec && chown -R mcpuser:mcpuser /etc/ntpsec
+
+# Copy NTP configuration template
+COPY config/ntp.conf.template /etc/ntpsec/ntp.conf.template
 USER mcpuser
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \

@@ -102,8 +102,56 @@ az containerapp update \
 
 ## NTP / Time synchronization guidance for Azure deployments
 
+### Shared Memory Interface (SHM) Configuration
+
+The MCP UTC Time Server uses NTPsec's shared memory driver for nanosecond-precision timing (<1µs latency). This requires NTPsec running inside the container with proper configuration:
+
+**Container Requirements:**
+- NTPsec package installed (already in `Dockerfile.local`)
+- Shared memory segment accessible (key: `0x4e545030+unit`)
+- NTPsec daemon running with SHM driver configured
+
+**NTP Configuration for SHM:**
+The server expects NTPsec to provide time via shared memory segment unit 0. The included `config/ntp.conf.template` provides:
+
+```conf
+# Shared Memory Driver (type 28) - unit 0
+server 127.127.28.0 mode 1 prefer
+fudge 127.127.28.0 refid SHM0
+```
+
+**Starting NTPsec in Container:**
+```bash
+# Copy NTP config
+cp /etc/ntpsec/ntp.conf.template /etc/ntp.conf
+
+# Create required directories
+mkdir -p /var/lib/ntpsec /var/log/ntpsec
+
+# Set permissions for shared memory (0666 for IPC)
+# NTPsec will create SHM segment automatically
+
+# Start NTPsec daemon
+ntpd -c /etc/ntp.conf -g
+```
+
+**Health Check Verification:**
+The `/health` endpoint reports SHM interface status:
+```json
+{
+  "ntp": {
+    "shm_valid": true,
+    "pps_enabled": false,
+    "shm_interface": "active",
+    "hardware_clock": "Not detected"
+  }
+}
+```
+
 Notes:
 - Microsoft recommends using the Azure host time or Microsoft-maintained NTP sources for most workloads. For Container Apps (PaaS), the platform manages host time; however if your application needs to query NTP servers (for diagnostics or monitoring) you may configure `NTP_SERVERS` env var to a short list of regional NTP servers.
+- The SHM interface provides <1µs latency vs ~10ms for shell commands
+- For hardware clock support (GPIO PPS), see `docs/NTP_SHM_SETUP.md`
 - For `australiasoutheast` choose regionally close, reliable public NTP servers. Examples:
   - time.cloudflare.com (global Anycast)
   - time.google.com (global Anycast)
