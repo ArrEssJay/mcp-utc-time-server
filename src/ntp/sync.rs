@@ -1,7 +1,7 @@
 // NTP-synchronized clock access via NTPsec shared memory interface
 use libc::{shmat, shmdt, shmget, IPC_CREAT};
 use std::ptr;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
 const NTP_SHM_SIZE: usize = 96;
 
@@ -38,6 +38,7 @@ pub struct NtpStatus {
 
 /// Shared memory interface to NTPsec
 pub struct NtpShmInterface {
+    #[allow(dead_code)] // Used in Drop implementation
     shm_id: i32,
     shm_ptr: *mut NtpShmTime,
     unit: u8,
