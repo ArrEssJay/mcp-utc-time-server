@@ -1,5 +1,5 @@
 # Multi-stage build for GLIBC compatibility and NTPsec SHM support
-FROM rust:1.82-bookworm AS builder
+FROM rust:1.84-bookworm AS builder
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -8,6 +8,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libssl-dev \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
+
+# Install nightly Rust for edition2024 support
+RUN rustup toolchain install nightly && rustup default nightly
 
 WORKDIR /build
 
