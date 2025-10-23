@@ -27,23 +27,19 @@ RUN cargo build --release --bin mcp-utc-time-server
 # Runtime stage
 FROM debian:bookworm-slim
 
-# Install runtime dependencies (make NTP optional for container environments)
+# Install runtime dependencies including NTP tools
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     tzdata \
     curl \
     libssl3 \
+    ntp \
     && rm -rf /var/lib/apt/lists/*
 
-# Try to install NTPsec (optional, may not be needed in container)
-RUN apt-get update && \
-    (apt-get install -y --no-install-recommends ntpsec ntpsec-ntpdate || true) && \
-    rm -rf /var/lib/apt/lists/*
-
-# Create stub ntpq script if not installed
+# Verify ntpq is available, create stub if missing
 RUN if ! command -v ntpq &> /dev/null; then \
     echo '#!/bin/sh' > /usr/bin/ntpq && \
-    echo 'echo "NTP not available in container"' >> /usr/bin/ntpq && \
+    echo 'echo "NTP query tool not available"' >> /usr/bin/ntpq && \
     echo 'exit 1' >> /usr/bin/ntpq && \
     chmod +x /usr/bin/ntpq; \
     fi
