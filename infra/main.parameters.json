@@ -1,7 +1,7 @@
 {
   "environmentName": { "value": "mcp-time-env" },
   "containerAppName": { "value": "mcp-utc-time" },
-  "acrName": { "value": "mcptimeregistry" },
+  "acrName": { "value": "iioacr" },
   "keyVaultName": { "value": "mcp-time-kv" },
   "logAnalyticsName": { "value": "mcp-time-law" },
   "location": { "value": "australiasoutheast" }

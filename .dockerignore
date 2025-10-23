@@ -1,8 +1,8 @@
 # Ignore Rust build artifacts and other large or secret files
+
 target/**
-# But allow the release binary for Dockerfile.local
+!target/release
 !target/release/mcp-utc-time-server
-**/target/
 .git/
 .git/**
 .env*
@@ -14,5 +14,6 @@ dist/
 **/.terraform/
 Cargo.lock
 
-# Dockerfile artifacts
+## Dockerfile artifacts
+
 *.tar

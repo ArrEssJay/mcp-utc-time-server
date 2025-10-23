@@ -69,9 +69,8 @@ resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2021-06-01' = {
   }
 }
 
-// Container Apps Managed Environment - this example demonstrates wiring to Log Analytics
-// For production use, pick API versions and properties consistent with current Azure docs
-resource containerEnv 'Microsoft.Web/managedEnvironments@2022-03-01' = {
+// Container Apps Managed Environment - updated to use correct API version
+resource containerEnv 'Microsoft.App/managedEnvironments@2023-05-01' = {
   name: environmentName
   location: location
   properties: {
@@ -79,7 +78,7 @@ resource containerEnv 'Microsoft.Web/managedEnvironments@2022-03-01' = {
       destination: 'log-analytics'
       logAnalyticsConfiguration: {
         customerId: logAnalytics.properties.customerId
-        sharedKey: listKeys(logAnalytics.id, '2021-06-01').primarySharedKey
+        sharedKey: logAnalytics.listKeys().primarySharedKey
       }
     }
   }
@@ -88,7 +87,7 @@ resource containerEnv 'Microsoft.Web/managedEnvironments@2022-03-01' = {
 // Assign AcrPull role to the user-assigned managed identity for the registry
 // RoleDefinitionId for AcrPull: 7f951dda-4ed3-4680-a7ca-43fe172d538d
 resource acrPullRole 'Microsoft.Authorization/roleAssignments@2020-04-01-preview' = if (!empty(acrName)) {
-  name: guid(acr.id, userIdentity.properties.principalId, 'acrpull')
+  name: guid(acr.id, userIdentity.id, 'acrpull')
   scope: acr
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')
@@ -104,5 +103,5 @@ resource acrPullRole 'Microsoft.Authorization/roleAssignments@2020-04-01-preview
 
 // Output values useful for CI/CD
 output RESOURCE_GROUP_ID string = resourceGroup().id
-output AZURE_CONTAINER_REGISTRY_ENDPOINT string = if (empty(acrName)) then '' else '${acrName}.azurecr.io'
+output AZURE_CONTAINER_REGISTRY_ENDPOINT string = empty(acrName) ? '' : '${acrName}.azurecr.io'
 output MANAGED_IDENTITY_PRINCIPAL_ID string = userIdentity.properties.principalId
