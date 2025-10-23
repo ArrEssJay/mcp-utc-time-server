@@ -547,10 +547,9 @@ pub async fn run_health_server() -> Result<()> {
         tokio::spawn(async move {
             let mut buf = vec![0u8; 8192];
 
-            match tokio::time::timeout(
-                std::time::Duration::from_secs(5),
-                socket.read(&mut buf)
-            ).await {
+            match tokio::time::timeout(std::time::Duration::from_secs(5), socket.read(&mut buf))
+                .await
+            {
                 Ok(Ok(n)) if n > 0 => {
                     let request = String::from_utf8_lossy(&buf[..n]);
                     debug!(event = "http.request", peer = %peer_addr, request = %request.lines().next().unwrap_or(""));
