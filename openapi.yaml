@@ -47,7 +47,8 @@ paths:
         - Health
       summary: Health check
       description: Returns service health status, NTP sync state, and version information
-      operationId: getHealth
+      operationId: get_health
+      x-openai-isConsequential: false
       responses:
         '200':
           description: Service is healthy
@@ -73,7 +74,7 @@ paths:
         - Health
       summary: Prometheus metrics
       description: Returns Prometheus-formatted metrics for monitoring
-      operationId: getMetrics
+      operationId: get_metrics
       responses:
         '200':
           description: Prometheus metrics
@@ -99,7 +100,8 @@ paths:
         - Date/time components (year, month, day, hour, minute, second, nanosecond)
         - Weekday, week of year, day of year
         - Custom format examples (syslog, Apache log, etc.)
-      operationId: getTime
+      operationId: get_time
+      x-openai-isConsequential: false
       responses:
         '200':
           description: Complete time information
@@ -114,7 +116,8 @@ paths:
         - Time
       summary: Get Unix timestamp
       description: Returns Unix epoch time with nanosecond precision
-      operationId: getUnixTime
+      operationId: get_unix_time
+      x-openai-isConsequential: false
       responses:
         '200':
           description: Unix timestamp
@@ -133,7 +136,8 @@ paths:
         - Time
       summary: Get nanoseconds since epoch
       description: Returns high-precision nanoseconds since Unix epoch
-      operationId: getNanos
+      operationId: get_nanos
+      x-openai-isConsequential: false
       responses:
         '200':
           description: Nanoseconds since epoch
@@ -155,7 +159,8 @@ paths:
         - Timezone
       summary: List all available timezones
       description: Returns list of all IANA timezone identifiers (595+ timezones)
-      operationId: listTimezones
+      operationId: list_timezones
+      x-openai-isConsequential: false
       responses:
         '200':
           description: List of timezone identifiers
@@ -186,7 +191,8 @@ paths:
         - Timezone
       summary: Get time in specific timezone
       description: Returns current time converted to the specified IANA timezone
-      operationId: getTimeInTimezone
+      operationId: get_time_with_timezone
+      x-openai-isConsequential: false
       parameters:
         - name: timezone
           in: path
@@ -232,7 +238,8 @@ paths:
         **Note**: In container mode, NTP tools are not available as containers
         use the host system time. This endpoint will return a not-available
         response in containerized deployments.
-      operationId: getNtpStatus
+      operationId: get_ntp_status
+      x-openai-isConsequential: false
       responses:
         '200':
           description: NTP status (when running on bare metal/hardware)
