@@ -531,7 +531,8 @@ pub async fn run_http_api_server() -> Result<()> {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
 
-    let port = std::env::var("HEALTH_PORT")
+    let port = std::env::var("HTTP_API_PORT")
+        .or_else(|_| std::env::var("HEALTH_PORT")) // Backward compatibility
         .unwrap_or_else(|_| "3000".into())
         .parse::<u16>()
         .unwrap_or(3000);
