@@ -497,6 +497,12 @@ impl ServerHandler for TimeServer {
     }
 }
 
+/// Backward compatibility alias for run_http_api_server
+#[deprecated(since = "0.2.0", note = "Use run_http_api_server instead")]
+pub async fn run_health_server() -> Result<()> {
+    run_http_api_server().await
+}
+
 /// Run the MCP server (STDIO transport)
 pub async fn run() -> Result<()> {
     info!(
@@ -518,8 +524,9 @@ pub async fn run() -> Result<()> {
     Ok(())
 }
 
-/// Run HTTP API server for health checks and MCP operations
-pub async fn run_health_server() -> Result<()> {
+/// Run HTTP API server for health checks and time queries
+/// This provides a REST API at /health, /api/time, /api/unix, etc.
+pub async fn run_http_api_server() -> Result<()> {
     use std::net::SocketAddr;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;

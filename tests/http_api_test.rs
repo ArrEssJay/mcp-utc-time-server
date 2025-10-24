@@ -8,14 +8,14 @@ use tokio::time::sleep;
 
 const TEST_PORT: u16 = 13000;
 
-/// Start the HTTP server in the background for testing
+/// Start the HTTP API server in the background for testing
 async fn start_test_server() -> tokio::task::JoinHandle<()> {
-    std::env::set_var("HEALTH_PORT", TEST_PORT.to_string());
+    std::env::set_var("HTTP_API_PORT", TEST_PORT.to_string());
     std::env::set_var("CONTAINER_APP_NAME", "test"); // Enable container mode
 
     tokio::spawn(async {
-        if let Err(e) = mcp_utc_time_server::server_sdk::run_health_server().await {
-            eprintln!("Server error: {}", e);
+        if let Err(e) = mcp_utc_time_server::server_sdk::run_http_api_server().await {
+            eprintln!("HTTP API server error: {}", e);
         }
     })
 }
