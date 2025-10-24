@@ -33,9 +33,9 @@ send_request() {
     local params="${2:-{}}"
     local id="${3:-1}"
     
-    # Send request and capture only JSON response (line 2, after the log line)
+    # Send request and capture the first line of valid JSON output
     echo "{\"jsonrpc\":\"2.0\",\"method\":\"$method\",\"params\":$params,\"id\":$id}" | \
-        "$BINARY" 2>/dev/null | sed -n '1p' || echo '{"error": "no response"}'
+        "$BINARY" 2>/dev/null | grep -m 1 '^{' || echo '{"error": "no response"}'
 }
 
 # Test function
