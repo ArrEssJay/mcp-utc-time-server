@@ -232,7 +232,7 @@ Create a GPT with this schema:
   "paths": {
     "/api/time": {
       "get": {
-        "operationId": "getTime",
+        "operationId": "get_time",
         "summary": "Get current UTC time"
       }
     }
