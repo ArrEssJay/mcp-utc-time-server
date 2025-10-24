@@ -8,39 +8,50 @@ az login
 az account set --subscription <subscription-id>
 ```
 
-2. Container Registry setup:
-```bash
-az acr create \
-  --resource-group mcp-time-rg \
-  --name mcptimeregistry \
-  --sku Basic
-
-az acr login --name mcptimeregistry
-```
+2. Container images are published to GitHub Container Registry (GHCR) automatically via GitHub Actions
+   - No separate container registry setup needed
+   - Images are available at: `ghcr.io/arressjay/mcp-utc-time-server:latest`
 
 # Build and Push Image
 
-You can publish images either to your Azure Container Registry (ACR) or to GitHub Container Registry (GHCR). We included a GitHub Actions workflow that builds a release binary and publishes an image to GHCR automatically on push to `main`.
+**Images are automatically built and published to GitHub Container Registry (GHCR) via GitHub Actions.**
 
-To use GHCR (recommended if you don't have a local Docker install or prefer GitHub-managed publishing):
+The workflow `.github/workflows/ghcr-publish.yml` automatically:
+- Runs tests
+- Builds the Docker image
+- Pushes to GHCR on every push to `main` or `release/**` branches
 
+**Available images:**
 ```bash
-# Push is automatic via .github/workflows/ghcr-publish.yml on push to main
-# The image will be available as:
-ghcr.io/<owner>/mcp-utc-time-server:latest
+# Latest from main branch
+ghcr.io/arressjay/mcp-utc-time-server:latest
+
+# Specific release tags
+ghcr.io/arressjay/mcp-utc-time-server:v1.0.0
 ```
 
-To use ACR (if you prefer):
+**To trigger a new build:**
+```bash
+# Commit and push to main or release branch
+git add .
+git commit -m "Update deployment"
+git push origin release/v1.0
 
+# Watch the build
+gh run watch
+```
+
+**Manual build (if needed):**
 ```bash
 # Build locally
-docker build -f Dockerfile.hardware -t mcp-utc-time-server:latest .
+docker build -f Dockerfile -t mcp-utc-time-server:latest .
 
-# Tag for ACR
-docker tag mcp-utc-time-server:latest mcptimeregistry.azurecr.io/mcp-utc-time-server:latest
+# Tag for GHCR
+docker tag mcp-utc-time-server:latest ghcr.io/arressjay/mcp-utc-time-server:latest
 
-# Push to registry
-docker push mcptimeregistry.azurecr.io/mcp-utc-time-server:latest
+# Login and push
+echo $GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin
+docker push ghcr.io/arressjay/mcp-utc-time-server:latest
 ```
 
 ## Deploy to Azure Container Apps
@@ -57,17 +68,15 @@ az containerapp env create \
   --resource-group mcp-time-rg \
   --location eastus
 
-# Create Container App (example for GHCR image)
+# Create Container App using GHCR image
+# Note: GHCR public images don't require registry credentials
 az containerapp create \
   --name mcp-utc-time \
   --resource-group mcp-time-rg \
   --environment mcp-time-env \
-  --image ghcr.io/<owner>/mcp-utc-time-server:latest \
+  --image ghcr.io/arressjay/mcp-utc-time-server:latest \
   --target-port 3000 \
   --ingress external \
-  --registry-server mcptimeregistry.azurecr.io \
-  --registry-username <registry-username> \
-  --registry-password <registry-password> \
   --env-vars \
     "API_KEY_1=secretvalue(api-key-1)" \
     "API_KEY_2=secretvalue(api-key-2)" \

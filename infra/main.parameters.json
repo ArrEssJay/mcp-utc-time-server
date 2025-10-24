@@ -1,7 +1,7 @@
 {
   "environmentName": { "value": "mcp-time-env" },
   "containerAppName": { "value": "mcp-utc-time" },
-  "acrName": { "value": "iioacr" },
+  "containerImage": { "value": "ghcr.io/arressjay/mcp-utc-time-server:latest" },
   "keyVaultName": { "value": "mcp-time-kv" },
   "logAnalyticsName": { "value": "mcp-time-law" },
   "location": { "value": "australiasoutheast" }
