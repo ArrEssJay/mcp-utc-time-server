@@ -1,0 +1,18 @@
+# Ignore Rust build artifacts and other large or secret files
+
+target/**
+!target/release
+!target/release/mcp-utc-time-server
+.git/
+.git/**
+.env*
+.env.local
+.vscode/
+node_modules/
+dist/
+/.terraform/
+**/.terraform/
+
+## Dockerfile artifacts
+
+*.tar

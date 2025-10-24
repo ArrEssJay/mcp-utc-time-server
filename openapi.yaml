@@ -1,0 +1,494 @@
+openapi: 3.1.0
+info:
+  title: MCP UTC Time Server HTTP API
+  version: 0.1.0
+  description: |
+    High-precision UTC time server with timezone support and NTP synchronization.
+    
+    This REST API provides the same functionality as the MCP stdio interface,
+    accessible via standard HTTP requests. Ideal for web applications, monitoring,
+    and integrations that cannot use the MCP protocol directly.
+    
+    **Base URL (Azure)**: https://mcp-utc-time.bluedune-ec819a83.australiasoutheast.azurecontainerapps.io
+    
+    **Features**:
+    - Sub-microsecond precision timestamps
+    - 595+ IANA timezone support
+    - NTP synchronization status
+    - Prometheus metrics
+    - CORS enabled
+  contact:
+    name: GitHub Repository
+    url: https://github.com/ArrEssJay/mcp-utc-time-server
+  license:
+    name: MIT
+    url: https://github.com/ArrEssJay/mcp-utc-time-server/blob/main/LICENSE
+
+servers:
+  - url: https://mcp-utc-time.bluedune-ec819a83.australiasoutheast.azurecontainerapps.io
+    description: Production (Azure Container Apps)
+  - url: http://localhost:3000
+    description: Local development
+
+tags:
+  - name: Health
+    description: Service health and monitoring
+  - name: Time
+    description: Time query operations
+  - name: Timezone
+    description: Timezone conversion and listing
+  - name: NTP
+    description: NTP synchronization status
+
+paths:
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Health check
+      description: Returns service health status, NTP sync state, and version information
+      operationId: getHealth
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: healthy
+                service: mcp-utc-time-server
+                version: 0.1.0
+                timestamp: "2025-10-24T05:06:22.515919331+00:00"
+                ntp:
+                  synced: true
+                  stratum: 3
+                  offset_ms: 0.0
+                  shm_valid: false
+                  pps_enabled: false
+
+  /metrics:
+    get:
+      tags:
+        - Health
+      summary: Prometheus metrics
+      description: Returns Prometheus-formatted metrics for monitoring
+      operationId: getMetrics
+      responses:
+        '200':
+          description: Prometheus metrics
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: |
+                # TYPE mcp_time_seconds gauge
+                mcp_time_seconds 1761282399
+                # TYPE mcp_time_nanos gauge
+                mcp_time_nanos 509856152
+
+  /api/time:
+    get:
+      tags:
+        - Time
+      summary: Get comprehensive time information
+      description: |
+        Returns complete UTC time information including:
+        - Unix timestamps (seconds, milliseconds, microseconds, nanoseconds)
+        - ISO8601, RFC3339, RFC2822, ctime formats
+        - Date/time components (year, month, day, hour, minute, second, nanosecond)
+        - Weekday, week of year, day of year
+        - Custom format examples (syslog, Apache log, etc.)
+      operationId: getTime
+      responses:
+        '200':
+          description: Complete time information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TimeResponse'
+
+  /api/unix:
+    get:
+      tags:
+        - Time
+      summary: Get Unix timestamp
+      description: Returns Unix epoch time with nanosecond precision
+      operationId: getUnixTime
+      responses:
+        '200':
+          description: Unix timestamp
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnixTimeResponse'
+              example:
+                seconds: 1761282399
+                nanos: 509856152
+                nanos_since_epoch: 1761282399509856152
+
+  /api/nanos:
+    get:
+      tags:
+        - Time
+      summary: Get nanoseconds since epoch
+      description: Returns high-precision nanoseconds since Unix epoch
+      operationId: getNanos
+      responses:
+        '200':
+          description: Nanoseconds since epoch
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  nanos_since_epoch:
+                    type: integer
+                    format: int64
+                    description: Nanoseconds since Unix epoch (1970-01-01 00:00:00 UTC)
+                example:
+                  nanos_since_epoch: 1761282399509856152
+
+  /api/timezones:
+    get:
+      tags:
+        - Timezone
+      summary: List all available timezones
+      description: Returns list of all IANA timezone identifiers (595+ timezones)
+      operationId: listTimezones
+      responses:
+        '200':
+          description: List of timezone identifiers
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  timezones:
+                    type: array
+                    items:
+                      type: string
+                    description: IANA timezone identifiers
+                  count:
+                    type: integer
+                    description: Total number of timezones
+                example:
+                  timezones:
+                    - America/New_York
+                    - Europe/London
+                    - Asia/Tokyo
+                    - Australia/Sydney
+                  count: 595
+
+  /api/time/timezone/{timezone}:
+    get:
+      tags:
+        - Timezone
+      summary: Get time in specific timezone
+      description: Returns current time converted to the specified IANA timezone
+      operationId: getTimeInTimezone
+      parameters:
+        - name: timezone
+          in: path
+          required: true
+          description: IANA timezone identifier (e.g., America/New_York, Asia/Tokyo)
+          schema:
+            type: string
+          examples:
+            newYork:
+              value: America/New_York
+              summary: New York timezone
+            tokyo:
+              value: Asia/Tokyo
+              summary: Tokyo timezone
+            london:
+              value: Europe/London
+              summary: London timezone
+      responses:
+        '200':
+          description: Time in specified timezone
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TimezoneResponse'
+        '400':
+          description: Invalid timezone identifier
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Invalid timezone"
+                message: "Unknown timezone: Invalid/Timezone"
+
+  /api/ntp/status:
+    get:
+      tags:
+        - NTP
+      summary: Get NTP synchronization status
+      description: |
+        Returns NTP synchronization status and metrics.
+        
+        **Note**: In container mode, NTP tools are not available as containers
+        use the host system time. This endpoint will return a not-available
+        response in containerized deployments.
+      operationId: getNtpStatus
+      responses:
+        '200':
+          description: NTP status (when running on bare metal/hardware)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NtpStatusResponse'
+        '501':
+          description: NTP not available (container mode)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "NTP not available in container mode"
+
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      required:
+        - status
+        - service
+        - version
+        - timestamp
+        - ntp
+      properties:
+        status:
+          type: string
+          enum: [healthy]
+          description: Service health status
+        service:
+          type: string
+          description: Service name
+          example: mcp-utc-time-server
+        version:
+          type: string
+          description: Service version
+          example: 0.1.0
+        timestamp:
+          type: string
+          format: date-time
+          description: Current timestamp (ISO8601 with nanoseconds)
+        ntp:
+          $ref: '#/components/schemas/NtpInfo'
+
+    NtpInfo:
+      type: object
+      required:
+        - synced
+        - stratum
+        - offset_ms
+        - shm_valid
+        - pps_enabled
+      properties:
+        synced:
+          type: boolean
+          description: Whether NTP is synchronized
+        stratum:
+          type: integer
+          description: NTP stratum level (lower is better, 0-16)
+        offset_ms:
+          type: number
+          format: float
+          description: Clock offset in milliseconds
+        shm_valid:
+          type: boolean
+          description: Whether shared memory segment is valid
+        pps_enabled:
+          type: boolean
+          description: Whether PPS (Pulse Per Second) is enabled
+
+    TimeResponse:
+      type: object
+      required:
+        - unix
+        - iso8601
+        - rfc3339
+        - rfc2822
+        - ctime
+        - nanos_since_epoch
+        - seconds
+        - microseconds
+        - milliseconds
+        - year
+        - month
+        - day
+        - hour
+        - minute
+        - second
+        - nanosecond
+        - timezone
+        - offset
+        - weekday
+        - week_of_year
+        - day_of_year
+        - custom_formats
+      properties:
+        unix:
+          $ref: '#/components/schemas/UnixTimeResponse'
+        iso8601:
+          type: string
+          description: ISO8601 format
+          example: "2025-10-24T05:06:39.509855707Z"
+        rfc3339:
+          type: string
+          description: RFC3339 format
+          example: "2025-10-24T05:06:39.509855707+00:00"
+        rfc2822:
+          type: string
+          description: RFC2822 format
+          example: "Fri, 24 Oct 2025 05:06:39 +0000"
+        ctime:
+          type: string
+          description: C time format
+          example: "Fri Oct 24 05:06:39 2025"
+        nanos_since_epoch:
+          type: integer
+          format: int64
+        seconds:
+          type: integer
+          format: int64
+        microseconds:
+          type: integer
+          format: int64
+        milliseconds:
+          type: integer
+          format: int64
+        year:
+          type: integer
+        month:
+          type: integer
+        day:
+          type: integer
+        hour:
+          type: integer
+        minute:
+          type: integer
+        second:
+          type: integer
+        nanosecond:
+          type: integer
+        timezone:
+          type: string
+          example: UTC
+        offset:
+          type: integer
+          description: UTC offset in seconds
+        weekday:
+          type: string
+          example: Friday
+        week_of_year:
+          type: integer
+        day_of_year:
+          type: integer
+        custom_formats:
+          type: object
+          properties:
+            unix_timestamp:
+              type: string
+            unix_date:
+              type: string
+            syslog:
+              type: string
+            apache_log:
+              type: string
+
+    UnixTimeResponse:
+      type: object
+      required:
+        - seconds
+        - nanos
+        - nanos_since_epoch
+      properties:
+        seconds:
+          type: integer
+          format: int64
+          description: Seconds since Unix epoch (1970-01-01 00:00:00 UTC)
+        nanos:
+          type: integer
+          format: int32
+          description: Nanosecond component (0-999999999)
+        nanos_since_epoch:
+          type: integer
+          format: int64
+          description: Total nanoseconds since Unix epoch
+
+    TimezoneResponse:
+      type: object
+      required:
+        - timezone
+        - iso8601
+        - offset
+        - offset_hours
+        - is_dst
+      properties:
+        timezone:
+          type: string
+          description: IANA timezone identifier
+        iso8601:
+          type: string
+          description: ISO8601 formatted time in the specified timezone
+        offset:
+          type: integer
+          description: UTC offset in seconds
+        offset_hours:
+          type: number
+          format: float
+          description: UTC offset in hours (e.g., -5.0 for EST)
+        is_dst:
+          type: boolean
+          description: Whether daylight saving time is active
+
+    NtpStatusResponse:
+      type: object
+      required:
+        - synced
+        - stratum
+        - offset_ms
+      properties:
+        synced:
+          type: boolean
+          description: Whether NTP is synchronized
+        stratum:
+          type: integer
+          description: NTP stratum level
+        offset_ms:
+          type: number
+          format: float
+          description: Clock offset in milliseconds
+        peers:
+          type: array
+          description: List of NTP peers (if available)
+          items:
+            type: object
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Error message
+        message:
+          type: string
+          description: Detailed error description
+
+  securitySchemes: {}
+
+security: []
+
+x-readme:
+  samples-languages:
+    - curl
+    - javascript
+    - python
+    - go
+    - ruby

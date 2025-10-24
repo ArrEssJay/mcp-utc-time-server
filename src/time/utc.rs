@@ -117,7 +117,7 @@ impl EnhancedTimeResponse {
     pub fn format_custom(&self, format: &str) -> Result<String, Box<dyn std::error::Error>> {
         let dt = DateTime::<Utc>::from_timestamp(self.unix.seconds, self.unix.nanos)
             .ok_or("Invalid timestamp")?;
-        Ok(StrftimeFormatter::format(&dt, format)?)
+        StrftimeFormatter::format(&dt, format)
     }
 }
 

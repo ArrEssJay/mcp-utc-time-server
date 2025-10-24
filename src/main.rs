@@ -21,21 +21,34 @@ async fn main() -> Result<()> {
         )
         .init();
 
-    // Check if we should run health server alongside MCP server
-    let enable_health = env::var("ENABLE_HEALTH_SERVER")
+    // Check if we should run HTTP API server alongside MCP server
+    let enable_http_api = env::var("ENABLE_HTTP_API")
+        .or_else(|_| env::var("ENABLE_HEALTH_SERVER")) // Backward compatibility
         .unwrap_or_else(|_| "true".into())
         .parse::<bool>()
         .unwrap_or(true);
 
-    if enable_health {
-        // Spawn HTTP health server in background
+    // Check if we're running in container mode (HTTP API only, no stdio)
+    let container_mode = env::var("CONTAINER_APP_NAME").is_ok()
+        || env::var("KUBERNETES_SERVICE_HOST").is_ok()
+        || env::var("HTTP_API_ONLY").is_ok();
+
+    if container_mode {
+        // Container mode: run ONLY the HTTP API server (no stdin available for MCP stdio)
+        tracing::info!("Running in container mode - HTTP API server only");
+        mcp_utc_time_server::server_sdk::run_http_api_server().await
+    } else if enable_http_api {
+        // Local mode: run both HTTP API server and MCP stdio server
         tokio::spawn(async {
-            if let Err(e) = mcp_utc_time_server::server_sdk::run_health_server().await {
-                eprintln!("Health server error: {}", e);
+            if let Err(e) = mcp_utc_time_server::server_sdk::run_http_api_server().await {
+                eprintln!("HTTP API server error: {}", e);
             }
         });
-    }
 
-    // Run the MCP server with official SDK (STDIO transport)
-    mcp_utc_time_server::server_sdk::run().await
+        // Run the MCP server with official SDK (STDIO transport)
+        mcp_utc_time_server::server_sdk::run().await
+    } else {
+        // MCP stdio server only
+        mcp_utc_time_server::server_sdk::run().await
+    }
 }

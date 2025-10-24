@@ -255,6 +255,29 @@ cargo tarpaulin --out Html
 ### VSCode (Local)
 Direct STDIO integration for VSCode Copilot and AI features. See [QUICKSTART.md](QUICKSTART.md) for setup.
 
+### HTTP API (REST)
+The server provides a REST API for agents and applications:
+
+**Production URL**: `https://mcp-utc-time.bluedune-ec819a83.australiasoutheast.azurecontainerapps.io`
+
+```bash
+# Health check
+curl https://mcp-utc-time.bluedune-ec819a83.australiasoutheast.azurecontainerapps.io/health
+
+# Get current time
+curl https://mcp-utc-time.bluedune-ec819a83.australiasoutheast.azurecontainerapps.io/api/time
+
+# Get Unix timestamp
+curl https://mcp-utc-time.bluedune-ec819a83.australiasoutheast.azurecontainerapps.io/api/unix
+
+# Get time in timezone
+curl https://mcp-utc-time.bluedune-ec819a83.australiasoutheast.azurecontainerapps.io/api/time/timezone/America/New_York
+```
+
+**OpenAPI Spec**: [openapi.yaml](openapi.yaml) - For AI agents, code generation, and API documentation
+
+**Complete guide**: [docs/HTTP_API.md](docs/HTTP_API.md)
+
 ### ChatGPT Custom GPT (Remote)
 Expose via Cloudflare Tunnel for ChatGPT integration:
 
@@ -275,18 +298,6 @@ export MCPO_API_KEY="$(openssl rand -base64 32)"
 ```
 
 **Complete guide:** [docs/TUNNEL_SETUP.md](docs/TUNNEL_SETUP.md)
-
-### HTTP API (MCPO)
-For custom integrations, expose as REST API:
-
-```bash
-export MCPO_API_KEY="your-secret-key"
-./scripts/start_mcpo.sh
-
-# Access at http://localhost:8000
-curl -X POST http://localhost:8000/time/get \
-  -H "Authorization: Bearer $MCPO_API_KEY"
-```
 
 See [docs/INTEGRATION.md](docs/INTEGRATION.md) for all integration options.
 
