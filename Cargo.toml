@@ -40,7 +40,8 @@ askama = { version = "0.12", optional = true }
 tempfile = "3.8"
 criterion = "0.5"
 rstest = "0.18"
-reqwest = { version = "0.12", features = ["json"] }
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+serial_test = "3.0"
 
 [[bench]]
 name = "time_benchmarks"
