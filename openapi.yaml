@@ -48,6 +48,7 @@ paths:
       summary: Health check
       description: Returns service health status, NTP sync state, and version information
       operationId: get_health
+      x-openai-isConsequential: false
       responses:
         '200':
           description: Service is healthy
@@ -100,6 +101,7 @@ paths:
         - Weekday, week of year, day of year
         - Custom format examples (syslog, Apache log, etc.)
       operationId: get_time
+      x-openai-isConsequential: false
       responses:
         '200':
           description: Complete time information
@@ -115,6 +117,7 @@ paths:
       summary: Get Unix timestamp
       description: Returns Unix epoch time with nanosecond precision
       operationId: get_unix_time
+      x-openai-isConsequential: false
       responses:
         '200':
           description: Unix timestamp
@@ -134,6 +137,7 @@ paths:
       summary: Get nanoseconds since epoch
       description: Returns high-precision nanoseconds since Unix epoch
       operationId: get_nanos
+      x-openai-isConsequential: false
       responses:
         '200':
           description: Nanoseconds since epoch
@@ -156,6 +160,7 @@ paths:
       summary: List all available timezones
       description: Returns list of all IANA timezone identifiers (595+ timezones)
       operationId: list_timezones
+      x-openai-isConsequential: false
       responses:
         '200':
           description: List of timezone identifiers
@@ -187,6 +192,7 @@ paths:
       summary: Get time in specific timezone
       description: Returns current time converted to the specified IANA timezone
       operationId: get_time_with_timezone
+      x-openai-isConsequential: false
       parameters:
         - name: timezone
           in: path
@@ -233,6 +239,7 @@ paths:
         use the host system time. This endpoint will return a not-available
         response in containerized deployments.
       operationId: get_ntp_status
+      x-openai-isConsequential: false
       responses:
         '200':
           description: NTP status (when running on bare metal/hardware)
